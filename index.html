@@ -2,143 +2,416 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>つくラボ｜AIと一緒に、つくる人になろう</title>
+  <title>つくラボ｜静岡県・藤枝のAIプログラミングスクール</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
+  
+  <link rel="icon" href="favicon.ico">
   <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
   <!-- HERO -->
-  <section class="hero fade">
-    <h1>Be Creative!<br>AIと一緒に、つくる人になろう</h1>
-    <p>
-      つくラボは、AIと対話しながら<br>
-      アイデアを形にするプログラミング教室です。
-    </p>
+  <section class="hero">
+    <div class="hero-inner">
+      <img src="images/logo.png" alt="つくラボ ロゴ" class="hero-logo">
+
+      <h1>Be Creative!<br>つくる人になろう</h1>
+      <p>
+        つくラボは、AIと対話しながら<br>
+        アイデアを形にするプログラミング教室です。
+      </p>
+    </div>
   </section>
 
   <!-- ABOUT -->
-  <section class="fade">
-    <h2>つくラボって、なにをするところ？</h2>
-    <div class="card">
-      <p>
-        ChatGPTなどのAIを使いながら、<br>
-        ゲームやアプリを実際に作ります。
-      </p>
-      <p>
-        「与えられたものを使う」から、<br>
-        <strong>「自分で考えて、作る」</strong>へ。
-      </p>
-      <p>
-        プログラミングが初めてでも大丈夫。<br>
-        AIと一緒に、一歩ずつ進みます。
-      </p>
+  <section>
+    <h2><img src="images/logo.png" alt="つくラボ" style="width: 100px; vertical-align: sub;">って、なにをするの？</h2>
+
+    <p>
+      → ChatGPTなどのAIと会話をしながら、60分のセッションで実際に動くプログラムを作ります。
+    </p>
+    <div class="ink-bg fade">
+      <picture>
+        <source srcset="images/lab_desc1.webp" type="image/webp">
+        <img src="images/lab_desc1.png" alt="つくラボとは？" class="img-center" style="width: 500px;" loading="lazy">
+      </picture>
     </div>
   </section>
 
   <!-- WORKS -->
-  <section class="fade">
+  <section>
     <h2>60分のセッションで作れるもの</h2>
+
+    <p>
+      クリックして、遊んでみてね！
+    </p>
     <div class="works">
-      <div class="work">
-        <h3>🎮 ゲーム</h3>
-        <p>もぐらたたき、レースゲームなど</p>
+
+      <div class="work demo-card fade">
+        <a href="demo_apps/break_out/index.html"
+          target="_blank"
+          class="demo-link">
+
+          <div class="demo-thumb">
+            <picture>
+              <source srcset="images/demo_break_out.webp" type="image/webp">
+              <img src="images/demo_break_out.png"
+                  alt="ブロック崩しのデモ"
+                  loading="lazy">
+            </picture>
+          </div>
+
+          <h3>ブロック崩し</h3>
+        </a>
       </div>
-      <div class="work">
-        <h3>🐱 探しもの</h3>
-        <p>猫を探すゲーム など</p>
+
+      <div class="work demo-card fade">
+        <a href="demo_apps/flappybird/index.html" target="_blank" class="demo-link">
+      
+          <div class="demo-thumb">
+            <picture>
+              <source srcset="images/demo_flappy_bird.webp" type="image/webp">
+              <img src="images/demo_flappy_bird.png" alt="Flappy Bird（飛べ！）のデモ" loading="lazy">
+            </picture>
+          </div>
+      
+          <h3>Flappy Bird（飛べ！）</h3>
+        </a>
       </div>
-      <div class="work">
-        <h3>🌱 育てる系</h3>
-        <p>植物を枯らさないゲーム など</p>
+
+      <div class="work demo-card fade">
+        <a href="demo_apps/cat_search/index.html" target="_blank" class="demo-link">
+      
+          <div class="demo-thumb">
+            <picture>
+              <source srcset="images/demo_cat_search.webp" type="image/webp">
+              <img src="images/demo_cat_search.png" alt="猫を探すゲームのデモ" loading="lazy">
+            </picture>
+          </div>
+      
+          <h3>猫を探すゲーム</h3>
+        </a>
       </div>
     </div>
+
+    <p class="note">
+      ここで紹介しているのは、ほんの一例です。<br>
+      プログラミングが初めてでも、60分でここまで作れます。（コツを掴めば、もっとスゴいものも作れます）
+    </p>
   </section>
 
-  <!-- FOR ADULT -->
-  <section class="fade">
-    <h2>大人の方へ</h2>
-    <div class="card">
-      <p>
-        つくラボでは、大人の方の参加も歓迎しています。
-      </p>
-      <p>
-        プログラミング経験は不要です。<br>
-        AIと対話しながら、
-      </p>
-      <ul>
-        <li>簡単なゲーム</li>
-        <li>業務に使えるツール</li>
-        <li>アイデアのプロトタイプ</li>
-      </ul>
-      <p>
-        を作る体験ができます。
-      </p>
+  <!-- 信念 -->
+  <section>
+    <h2>つくラボが大切にしていること</h2>
+
+    <div class="card card-with-image">
+      <div class="card-text">
+        <h3>「私も作れる」という自信</h3>
+        <p>
+          AIの力を借りれば、いろんなものを自分で作ることができます。
+        </p>
+        <p>
+          誰かが用意したものを「使うだけ」の人から、<strong>アイデアを形にして「つくる人」</strong>へ。<br>
+          <strong>「私も作れる」</strong>という自信と経験は、これからの人生において大きな武器になります。
+        </p>
+      </div>
+
+      <div class="card-illustration fade">
+        <div class="ink-bg" style="--ink-color: #dcfce7; width: 220px;">
+          <picture>
+            <source srcset="images/lab_desc2.webp" type="image/webp">
+            <img src="images/lab_desc2.png" alt="私もつくれる自信" loading="lazy">
+          </picture>
+        </div>
+      </div>
     </div>
+
+    <div class="card card-with-image">
+      <div class="card-text">
+        <h3>考えを言葉にする力</h3>
+        <p>
+          AIは魔法ではありません。<br>
+          何をどう伝えるかで、返ってくる答えが変わります。
+        </p>
+        <ul class="bold">
+          <li>頭の中のアイデアを言語化する力</li>
+          <li>適切で分かりやすい指示を出す力</li>
+        </ul>
+        <p>
+          これらは、AIとの会話だけではなく、人間とのコミュニケーションにおいても非常に重要な能力です。
+        </p>
+      </div>
+      <div class="card-illustration fade">
+        <div class="ink-bg" style="--ink-color: #E0F2FE; width: 220px;">
+          <picture>
+            <source srcset="images/lab_desc3.webp" type="image/webp">
+            <img src="images/lab_desc3.png" alt="考えを言葉にする力" loading="lazy">
+          </picture>
+        </div>
+      </div>
+    </div>
+
+    <div class="card card-with-image">
+      <div class="card-text">
+        <h3>AIプログラミングに慣れる</h3>
+        <p>
+          AIが書いたコードを読み、動かして、直していく。<br>
+          これはプログラミングの現場ですでに行われている方法です。
+        </p>
+        <p>
+          その繰り返しの中で、<br>
+          試行錯誤する力やプログラミングの知識も身につきます。<br>
+          <strong>AI時代の新しいプログラミングのパワーを、いち早く感じてみてください。</strong>
+        </p>
+      </div>
+      <div class="card-illustration fade">
+        <div class="ink-bg" style="--ink-color: #E0F2FE; width: 220px;">
+          <picture>
+            <source srcset="images/lab_desc2.webp" type="image/webp">
+            <img src="images/lab_desc2.png" alt="AIプログラミングに慣れること" loading="lazy">
+          </picture>
+        </div>
+      </div>
+    </div>
+
   </section>
 
   <!-- TEACHER -->
-  <section class="fade">
+  <section>
     <h2>講師紹介</h2>
-    <div class="card">
-      <p><strong>竹内 智則</strong></p>
-      <p>
-        プログラマー・英語講師。<br>
-        iPhoneアプリ「ぼくらの瞬間英作文」は<br>
-        40,000以上ダウンロードされています。
-      </p>
-      <p>
-        2025年、子どもが生まれ、地元藤枝へ。<br>
-        この街で「つくる人」を増やしたいと思い、つくラボを始めました。
-      </p>
-    </div>
-  </section>
 
-  <!-- PRICE -->
-  <section class="fade">
-    <h2>料金について</h2>
-    <div class="card">
-      <p>
-        体験ワークショップ：<strong>1,000円</strong>
-      </p>
-      <p>
-        月謝（予定）：<strong>7,700円〜</strong>
-      </p>
-      <p class="note">
-        ※内容・方針は変えず、段階的にアップデート予定です
-      </p>
+    <div class="card teacher-card">
+      <div class="teacher-header">
+        <img src="images/teacher.jpg" alt="講師 竹内智則" class="teacher-photo">
+
+        <div class="teacher-info">
+          <p class="teacher-name"><strong>竹内 智則</strong></p>
+          <p class="teacher-title">プログラマー・英語講師</p>
+        </div>
+      </div>
+
+      <div class="max-560">
+        <p class="font-15">
+          2010年島田商業卒業。<br>
+          在学中にプログラミングの技術を学び、<br>
+          その後15年以上にわたり様々なソフトウェアを開発してきました。
+        </p>
+        <p class="font-15">
+          iPhoneアプリ「ぼくらの瞬間英作文」は、40,000以上のダウンロードを記録し、毎日200名以上の方に利用されています。
+        </p>
+        <p class="font-15">
+          著書：
+          <a href="https://www.amazon.co.jp/%E3%81%BC%E3%81%8F%E3%82%89%E3%81%AE%E7%9E%AC%E9%96%93%E8%8B%B1%E4%BD%9C%E6%96%87-7%E6%97%A5%E9%96%93%E3%81%A7%E5%AD%A6%E3%81%B9%E3%82%8B-%E3%82%B9%E3%83%A9%E3%82%B9%E3%83%A9%E8%A9%B1%E3%81%99%E3%81%9F%E3%82%81%E3%81%AE%E8%8B%B1%E6%96%87%E6%B3%95%E3%83%88%E3%83%AC%E3%83%BC%E3%83%8B%E3%83%B3%E3%82%B0-%E7%AB%B9%E5%86%85-%E6%99%BA%E5%89%87/dp/4804763651/ref=sr_1_1?__mk_ja_JP=%E3%82%AB%E3%82%BF%E3%82%AB%E3%83%8A&crid=2KKEIQ79ULI8G&dib=eyJ2IjoiMSJ9.5J2q4lciVEsubKOh8DQM6BRBtsfDWL5SKVtxUkKmXsTORkfyvl1sFKdWJxJb7t1aMUYaII-laZsfNmowtFlFDx6fLsyURNT-xAVAaCnneNo.dR7za8ml1b7W5s5NyLNhESdu_292xpMDu5WI6BEVa8s&dib_tag=se&keywords=%E3%81%BC%E3%81%8F%E3%82%89%E3%81%AE%E7%9E%AC%E9%96%93%E8%8B%B1%E4%BD%9C%E6%96%87&qid=1767334150&sprefix=%E3%81%BC%E3%81%8F%E3%82%89%E3%81%AE%E7%9E%AC%E9%96%93%E8%8B%B1%E4%BD%9C%E6%96%87%2Caps%2C198&sr=8-1"
+            target="_blank" rel="noopener">
+            ぼくらの瞬間英作文
+          </a>
+          <br>
+          アプリ：
+          <a href="https://urbanmeetup.tokyo/app/shunkan" target="_blank" rel="noopener">
+            ぼくらの瞬間英作文
+          </a>、
+          <a href="https://urbanmeetup.tokyo/app/eitango" target="_blank" rel="noopener">
+            つながる英単語
+          </a>、
+          <a href="https://urbanmeetup.tokyo/app/listen" target="_blank" rel="noopener">
+            ぼくらの英語リスニング
+          </a>
+          など
+        </p>
+
+        <!-- ギャラリー -->
+        <div class="teacher-gallery">
+          <picture>
+            <source srcset="images/shunkan_hero.webp" type="image/webp">
+            <img src="images/shunkan_hero.jpg" alt="ぼくらの瞬間英作文" loading="lazy">
+          </picture>
+        
+          <picture>
+            <source srcset="images/eitango_hero.webp" type="image/webp">
+            <img src="images/eitango_hero.png" alt="つながる英単語" loading="lazy">
+          </picture>
+        </div>
+      </div>
+
+      <hr class="teacher-divider">
+
+      <div class="teacher-message letter-style max-560">
+        <h3 style="margin-bottom: 32px;">講師からのメッセージ</h3>
+
+        <div class="message-preview">
+          <p class="font-15">
+            <strong>Be Creative!</strong><br>
+            「つくる人になろう」
+          </p>
+        
+          <p class="font-15">
+            2025年、AIを活用したプログラミングの技術は大きく進化しました。
+          </p>
+        
+          <p class="font-15">
+            多くのプログラマーがAIを実務でも使用し、初心者でもAIと対話しながら、
+            <b>自分の作りたいものを形にできる時代</b>になっています。
+          </p>
+        </div>
+
+        <div class="message-fade-preview">
+          <p class="font-15">
+            一方で、「自分はプログラミングができない」「何かを作れるタイプじゃない」
+            そう思い込んでいる人も、まだたくさんいます。
+          </p>
+        </div>
+
+        <div class="message-more" id="messageMore">
+          <p class="font-15">
+            一方で、<br>
+            <strong>「自分はプログラミングができない」</strong><br>
+            <strong>「何かを作れるタイプじゃない」</strong><br>
+            そう思い込んでいる人も、まだたくさんいます。
+          </p>
+        
+          <p class="font-15">
+            でも実は、作れないのではなく、<br>
+            <strong>作ったことがないだけ</strong>かもしれません。
+          </p>
+        
+          <p class="font-15">
+            これからの時代、<br>
+            自分のアイデアを形にする力はとても大切で、<br>
+            AI社会の中で間違いなく必要とされる能力です。
+          </p>
+        
+          <p class="font-15">
+            私自身、どれだけ<strong>「つくる力」</strong>に支えられて、
+            これまで生きてこられたか。<br>
+            （実際に私は、これまでに作ったアプリを通して生計を立てています。）
+          </p>
+        
+          <p class="font-15">
+            私は、子どもが生まれたことをきっかけに、2025年に地元・藤枝に戻ってきました。<br>
+            この街で、私が学んできたプログラミングの技術を広められることに、
+            とてもワクワクしています。
+          </p>
+        
+          <p class="font-15">
+            たくさんの<strong>「つくる人」</strong>が生まれることを願って。
+          </p>
+
+          <p class="font-15 text-right">
+            竹内 智則
+          </p>
+        </div>
+        
+        <div class="text-center">
+          <button class="toggle-message-btn" id="toggleMessageBtn">
+            続きを読む
+          </button>
+        </div>
+      </div>
     </div>
   </section>
 
   <!-- APPLY -->
   <section class="fade">
-    <h2>体験ワークショップ申込み</h2>
+    <h2>参加・お申し込み</h2>
     <div class="card">
-      <p>
-        開催日・時間は随時更新します。
-      </p>
-      <a class="btn" href="https://forms.gle/xxxx" target="_blank">
-        申し込みはこちら
-      </a>
-    </div>
-  </section>
+      <div class="max-560">
+        <h3>体験ワークショップ</h3>
 
-  <!-- SNS -->
-  <section class="fade">
-    <h2>活動の様子</h2>
-    <p>
-      日々の様子はInstagramで発信しています。
-    </p>
-    <a class="btn" href="#" target="_blank">
-      Instagramを見る
-    </a>
+        <div class="text-center">
+          <a href="https://forms.gle/FraxsXaSLXf7o53f6"
+            target="_blank"
+            class="btn"
+            rel="noopener">
+            体験ワークショップに申し込む
+          </a>
+        </div>
+
+        <p>
+          日時：<br>
+          随時更新いたします。
+        </p>
+        <p>
+          料金：<strong>1,000円</strong>
+        </p>
+        <p>
+          時間：60分
+        </p>
+        <p>
+          会場：藤枝市志太交流センター（仮）
+        </p>
+        <p>
+          定員：各回８名
+        </p>
+
+        <p>
+          持ち物：<br>
+          ・ノートパソコン（あれば - なければレンタル用のPCを使っていただきます）<br>
+          ・USBメモリ（あれば - 完成したアプリをお持ち帰りいただき、ご自宅で動かすことができます）
+        </p>
+
+        <p>
+          コース：
+        </p>
+
+        <div class="course-cards">
+          <div class="course-card junior margin-bottom">
+            <h3>つくラボ ジュニア</h3>
+            <div class="course-target">小学校4年生〜中学生対象</div>
+            
+            <span class="font-15">
+              AIを使ってゲームやアプリを作りながら、「プログラムを動かして、改造する」ことがゴールです。<br>
+              その体験を通して、<strong>「私にも作れる」という自信</strong>を育みます。
+            </span>
+          </div>
+        
+          <div class="course-card creator margin-bottom">
+            <h3>つくラボ クリエイター</h3>
+            <div class="course-target">高校生〜大人対象</div>
+
+            <span class="font-15">
+              ゲームやアプリを作りながら、プログラミングの知識も学びます。<br>
+              AIが書き出したコードの意味を理解し、応用できる力を身につけます。<br>
+              また、仕事に役立つツールも制作し、進路設計や副業にも貢献することを目的としています。
+            </span>
+          </div>
+        </div>
+
+        <div class="text-center margin-bottom">
+          <a href="https://forms.gle/FraxsXaSLXf7o53f6" target="_blank" class="btn" rel="noopener">
+            体験ワークショップに申し込む
+          </a>
+        </div>
+        <br>
+
+        <h3>
+          継続スクールについて
+        </h3>
+
+        <p class="note">
+          ５月以降、継続して通えるスクールの開講を予定しています。<br>
+          ・ジュニア（60分）月謝6,600円〜8,800円<br>
+          ・クリエイター（90分）月謝10,000円〜12,000円<br>
+          どちらも月3回開催を検討中です。<br>
+          詳細は体験時にご案内します。
+        </p>
+      </div>
+    </div>
   </section>
 
   <footer>
     © つくラボ
   </footer>
+
+  <!-- DEMO MODAL -->
+  <div id="demoModal" class="modal">
+    <div class="modal-bg"></div>
+
+    <div class="modal-content">
+      <button class="modal-close">×</button>
+      <iframe id="demoFrame" src=""></iframe>
+    </div>
+  </div>
 
   <script src="script.js"></script>
 

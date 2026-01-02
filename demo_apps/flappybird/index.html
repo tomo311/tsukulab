@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Flappy Bird：スペースで飛ぶ鳥</title>
+  <style>
+    body{
+      font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      margin: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;   /* 横方向中央 */
+    }
+    canvas{
+      border: 1px solid #aaa;
+      border-radius: 10px;
+      background: #f7fbff;
+      display: block;
+    }
+    .info{
+      margin-top: 8px;
+      font-weight: 700;
+    }
+    .sub{
+      margin-top: 4px;
+      color: #555;
+      font-size: 13px;
+    }
+    #restartBtn{
+      margin-top: 12px;
+      padding: 12px 20px;
+      font-size: 16px;
+      font-weight: 700;
+      border-radius: 12px;
+      border: none;
+      background: #ff7675;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    #restartBtn:active{
+      transform: scale(0.96);
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="game" width="600" height="600"></canvas>
+<div class="info" id="info">SPACEでスタート / SPACEでジャンプ</div>
+<button id="restartBtn">リスタート</button>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const info = document.getElementById("info");
+
+const W = canvas.width;
+const H = canvas.height;
+
+const birdImage = new Image();
+birdImage.src = "bird.png";
+
+const flapSound = new Audio("flap.mp3");
+flapSound.volume = 0.6;
+
+function playFlapSound() {
+  flapSound.currentTime = 0; // 連打対策
+  flapSound.play().catch(() => { });
+}
+
+// ===== 鳥（プレイヤー） =====
+const bird = {
+  x: 90,
+  y: H / 2,
+  r: 14,          // 半径
+  vy: 0,
+  gravity: 0.45,
+  flap: -7.5
+};
+
+// ===== パイプ（障害物） =====
+let pipes = [];
+const pipeW = 60;
+const gapH = 160;
+let pipeSpeed = 2.6;
+let spawnTimer = 0;
+const SPAWN_INTERVAL = 95; // フレーム（60fps前提で約1.6秒）
+
+// ===== ゲーム状態 =====
+let running = false;
+let gameOver = false;
+let score = 0;
+
+// ===== 入力 =====
+window.addEventListener("keydown", (e) => {
+  if (e.key === " " || e.code === "Space") {
+    e.preventDefault();
+    if (!running && !gameOver) startGame();
+    if (running) bird.vy = bird.flap;
+    playFlapSound();
+  }
+  if (e.key.toLowerCase() === "r") {
+    reset();
+  }
+});
+
+canvas.addEventListener("pointerdown", () => {
+  // スマホ/タブレットでも遊べるように
+  if (!running && !gameOver) startGame();
+  if (running) bird.vy = bird.flap;
+  playFlapSound();
+});
+
+// ===== 初期化 =====
+function reset() {
+  running = false;
+  gameOver = false;
+  score = 0;
+  pipes = [];
+  spawnTimer = 0;
+  pipeSpeed = 2.6;
+
+  bird.y = H / 2;
+  bird.vy = 0;
+
+  info.textContent = "SPACEでスタート / SPACEでジャンプ";
+}
+
+function startGame() {
+  running = true;
+  info.textContent = "飛べ！";
+}
+
+// ===== パイプ生成 =====
+function spawnPipe() {
+  // 上パイプの下端が y=topH になるイメージ
+  const margin = 70;
+  const topH = Math.floor(
+    margin + Math.random() * (H - margin*2 - gapH)
+  );
+
+  pipes.push({
+    x: W + 10,
+    topH: topH,
+    passed: false
+  });
+}
+
+// ===== 当たり判定（円 vs 矩形） =====
+function circleRectHit(cx, cy, cr, rx, ry, rw, rh) {
+  const closestX = Math.max(rx, Math.min(cx, rx + rw));
+  const closestY = Math.max(ry, Math.min(cy, ry + rh));
+  const dx = cx - closestX;
+  const dy = cy - closestY;
+  return (dx*dx + dy*dy) <= cr*cr;
+}
+
+// ===== 更新 =====
+function update() {
+  if (!running) return;
+
+  // 鳥：物理
+  bird.vy += bird.gravity;
+  bird.y += bird.vy;
+
+  // 地面・天井
+  if (bird.y - bird.r < 0) {
+    bird.y = bird.r;
+    bird.vy = 0;
+  }
+  if (bird.y + bird.r > H) {
+    endGame();
+  }
+
+  // パイプ生成
+  spawnTimer++;
+  if (spawnTimer >= SPAWN_INTERVAL) {
+    spawnTimer = 0;
+    spawnPipe();
+  }
+
+  // パイプ移動＋判定
+  for (const p of pipes) {
+    p.x -= pipeSpeed;
+
+    const topRect = { x: p.x, y: 0, w: pipeW, h: p.topH };
+    const bottomRect = { x: p.x, y: p.topH + gapH, w: pipeW, h: H - (p.topH + gapH) };
+
+    // 衝突
+    if (
+      circleRectHit(bird.x, bird.y, bird.r, topRect.x, topRect.y, topRect.w, topRect.h) ||
+      circleRectHit(bird.x, bird.y, bird.r, bottomRect.x, bottomRect.y, bottomRect.w, bottomRect.h)
+    ) {
+      endGame();
+    }
+
+    // スコア：鳥がパイプを通過したら+1
+    if (!p.passed && p.x + pipeW < bird.x) {
+      p.passed = true;
+      score++;
+    }
+  }
+
+  // 画面外のパイプ削除
+  pipes = pipes.filter(p => p.x + pipeW > -20);
+
+  // 少しずつ難しくする（任意）
+  if (score > 0 && score % 6 === 0) {
+    pipeSpeed = 2.6 + Math.min(2.2, score * 0.03);
+  }
+}
+
+function endGame() {
+  running = false;
+  gameOver = true;
+  info.textContent = `💥 GAME OVER！スコア：${score}（Rでリスタート）`;
+}
+
+// ===== 描画 =====
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // 背景（空）
+  ctx.fillStyle = "#eaf6ff";
+  ctx.fillRect(0, 0, W, H);
+
+  // 雲っぽい線（雰囲気）
+  ctx.strokeStyle = "rgba(0,0,0,0.06)";
+  for (let i = 0; i < 6; i++) {
+    ctx.beginPath();
+    ctx.arc(60 + i*70, 80 + (i%2)*25, 40, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  // パイプ
+  for (const p of pipes) {
+    // 上
+    ctx.fillStyle = "#2ecc71";
+    ctx.fillRect(p.x, 0, pipeW, p.topH);
+
+    // 下
+    ctx.fillRect(p.x, p.topH + gapH, pipeW, H - (p.topH + gapH));
+
+    // ふち
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.strokeRect(p.x, 0, pipeW, p.topH);
+    ctx.strokeRect(p.x, p.topH + gapH, pipeW, H - (p.topH + gapH));
+  }
+
+  // 鳥（画像）
+  ctx.drawImage(
+    birdImage,
+    bird.x - bird.r,
+    bird.y - bird.r,
+    bird.r * 2,
+    bird.r * 2
+  );
+
+
+  // スコア表示（常に表示）
+  ctx.fillStyle = "#000";
+  ctx.font = "22px sans-serif";
+  ctx.fillText(`スコア: ${score}`, 12, 32);
+
+  // 待機中の案内
+  if (!running && !gameOver) {
+    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.font = "18px sans-serif";
+    ctx.fillText("SPACEでスタート / SPACEでジャンプ", 55, H/2);
+  }
+
+  // ループ
+  requestAnimationFrame(draw);
+}
+
+const restartBtn = document.getElementById("restartBtn");
+
+restartBtn.addEventListener("click", () => {
+  reset();
+});
+
+function resizeCanvas() {
+  const maxW = Math.min(420, window.innerWidth - 24);
+  const ratio = 520 / 400; // 元の縦横比
+  canvas.width = maxW;
+  canvas.height = maxW * ratio;
+}
+
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+// ===== ループ開始 =====
+reset();
+draw();
+function loop() {
+  update();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>猫を探すゲーム</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      margin: 16px;
+    }
+    canvas {
+      border: 1px solid #aaa;
+      border-radius: 10px;
+      display: block;
+      background: #f9f9f9;
+      max-width: 100%;
+      height: auto;
+    }
+    .info {
+      margin-top: 10px;
+      font-weight: 700;
+    }
+    .hint {
+      margin-top: 6px;
+      color: #555;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h2>猫を探すゲーム（クリックで探そう）</h2>
+  <canvas id="game" width="800" height="540"></canvas>
+  <div class="info" id="info">背景の中に猫が隠れています。猫をクリックして見つけよう！</div>
+  <div class="hint">※ cat.png と background.jpg をこのHTMLと同じフォルダに置いてください。</div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const info = document.getElementById("info");
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    // ===== 画像読み込み =====
+    const bgImg = new Image();
+    bgImg.src = "background.jpg";
+
+    const catImg = new Image();
+    catImg.src = "cat.png";
+
+    // ===== ゲーム状態 =====
+    let cleared = false;
+
+    // 猫の表示サイズ（画像の実サイズに関係なくここで統一）
+    const cat = {
+      w: 90,
+      h: 90,
+      x: 0,
+      y: 0,
+      visible: true
+    };
+
+    // 猫の位置をランダムに決める（背景からはみ出さない）
+    function randomizeCatPosition() {
+      cat.x = Math.floor(Math.random() * (W - cat.w));
+      cat.y = Math.floor(Math.random() * (H - cat.h));
+    }
+
+    // クリック座標をキャンバス座標に変換
+    function getMousePos(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return {
+        x: (evt.clientX - rect.left) * scaleX,
+        y: (evt.clientY - rect.top) * scaleY
+      };
+    }
+
+    // 当たり判定（猫の矩形をクリックしたか）
+    function isHitCat(px, py) {
+      return (
+        px >= cat.x &&
+        px <= cat.x + cat.w &&
+        py >= cat.y &&
+        py <= cat.y + cat.h
+      );
+    }
+
+    // ===== クリック処理 =====
+    canvas.addEventListener("click", (e) => {
+      if (cleared) return;
+
+      const { x, y } = getMousePos(e);
+
+      if (cat.visible && isHitCat(x, y)) {
+        cleared = true;
+        info.textContent = "🎉 クリア！猫を見つけました！";
+      } else {
+        // 外した時のメッセージ（任意）
+        info.textContent = "うーん…そこじゃない！もう一度探してみよう。";
+      }
+    });
+
+    // ===== 描画 =====
+    function draw() {
+      // 背景
+      ctx.clearRect(0, 0, W, H);
+      ctx.drawImage(bgImg, 0, 0, W, H);
+
+      // 猫
+      if (!cleared && cat.visible) {
+        ctx.drawImage(catImg, cat.x, cat.y, cat.w, cat.h);
+      }
+
+      // クリア表示（キャンバス上にも表示）
+      if (cleared) {
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 44px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("CLEAR!", W / 2, H / 2 - 10);
+
+        ctx.font = "20px sans-serif";
+        ctx.fillText("猫を見つけた！", W / 2, H / 2 + 30);
+
+        ctx.textAlign = "left";
+      }
+
+      requestAnimationFrame(draw);
+    }
+
+    // ===== 画像ロード完了を待って開始 =====
+    function startIfReady() {
+      if (!bgImg.complete || !catImg.complete) return;
+      // 画像が壊れていたり 0x0 のとき対策（読み込み失敗時）
+      if (bgImg.naturalWidth === 0 || catImg.naturalWidth === 0) {
+        info.textContent = "画像の読み込みに失敗しました。ファイル名と場所を確認してください。";
+        return;
+      }
+      randomizeCatPosition();
+      draw();
+    }
+
+    bgImg.onload = startIfReady;
+    catImg.onload = startIfReady;
+
+    // どちらかがキャッシュで即completeのときの保険
+    setTimeout(startIfReady, 50);
+  </script>
+</body>
+</html>
