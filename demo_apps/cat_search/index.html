@@ -84,7 +84,7 @@
     bgImg.src = "background.jpg";
 
     const catImages = [];
-    const CAT_COUNT = 5;
+    const CAT_COUNT = 9;
 
     for (let i = 1; i <= CAT_COUNT; i++) {
       const img = new Image();
@@ -112,7 +112,7 @@
     function createCats() {
       cats = [];
 
-      const count = Math.floor(Math.random() * 3) + 4; // 4〜6匹
+      const count = Math.floor(Math.random() * 3) + 4;
 
       // 使用する猫画像をランダムに選ぶ
       const indices = [...Array(CAT_COUNT).keys()]; // [0,1,2,3,4]
@@ -291,7 +291,7 @@
     }
 
     // どちらかがキャッシュで即completeのときの保険
-    // startIfReady();
+    startIfReady();
   </script>
 </body>
 </html>
