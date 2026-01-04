@@ -45,11 +45,33 @@ a:not(.btn):hover {
 
 .hero {
   max-width: none;
+  overflow: hidden;
+  position: relative;
   margin: 0;
   text-align: center;
-  padding: 20px 20px 100px;
-  background: linear-gradient(120deg, #e0f2ff, #fefefe);
+  padding: 20px 20px 50px;
 }
+
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background: linear-gradient(120deg, #d4ecff, #ffffff);
+  clip-path: circle(0% at 50% 50%);
+  transition: clip-path 0.8s ease-out;
+
+  z-index: 0;
+}
+
+.hero.bg-expand::before {
+  clip-path: circle(100% at 50% 50%);
+}
+
+/* .hero > * {
+  position: relative;
+  z-index: 1;
+} */
 
 .hero-inner {
   max-width: 900px;
@@ -74,6 +96,31 @@ a:not(.btn):hover {
 
 .hero h1 {
   font-size: 2.6rem;
+}
+
+@media (max-width: 600px) {
+  .hero h1 {
+    font-size: 1.9rem;
+  }
+}
+
+.cursor {
+  display: inline-block;
+  margin-left: 2px;
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes blink {
+
+  0%,
+  50% {
+    opacity: 1;
+  }
+
+  50.01%,
+  100% {
+    opacity: 0;
+  }
 }
 
 .hero p {
@@ -383,11 +430,6 @@ a:not(.btn):hover {
   border-radius: 55% 45% 60% 40% / 50% 60% 40% 55%;
 
   z-index: 1;
-}
-
-.ink-bg:hover::before {
-  transform: translate(6px, 4px) rotate(1deg);
-  transition: transform 0.6s cubic-bezier(.22, 1, .36, 1);
 }
 
 /* ===== common ===== */
