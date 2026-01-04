@@ -9,6 +9,16 @@
       font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
       margin: 16px;
     }
+
+    .container {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;     /* 横中央 */
+      justify-content: center; /* 縦中央 */
+      gap: 10px;
+    }
+    
     canvas {
       border: 1px solid #aaa;
       border-radius: 10px;
@@ -16,6 +26,7 @@
       background: #f9f9f9;
       max-width: 100%;
       height: auto;
+      cursor: pointer;
     }
     .info {
       margin-top: 10px;
@@ -26,18 +37,44 @@
       color: #555;
       font-size: 14px;
     }
+    button {
+      display: inline-block;
+      padding: 8px 16px;
+      font-size: 16px;
+      border: none;
+      border-radius: 6px;
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
-  <h2>猫を探すゲーム（クリックで探そう）</h2>
-  <canvas id="game" width="800" height="540"></canvas>
-  <div class="info" id="info">背景の中に猫が隠れています。猫をクリックして見つけよう！</div>
-  <div class="hint">※ cat.png と background.jpg をこのHTMLと同じフォルダに置いてください。</div>
+  <div class="container">
+    <h2>逃げた猫を見つけよう！</h2>
+    <canvas id="game" width="800" height="540"></canvas>
+    <div class="info" id="info">
+      逃げた猫を見つけよう！
+    </div>
+    <div style="text-align: center;">
+      <button id="restartBtn" style="display: none; margin-top:10px;">
+        もう一度あそぶ
+      </button>
+    </div>
+
+    <div class="hint">
+      猫の画像はこちらのサイトから利用させていただきました。
+      <a href="https://hiyokoyarou.com/" target="_blank" rel="noopener noreferrer">ぴよたそ</a>
+    </div>
+  </div>
 
   <script>
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
     const info = document.getElementById("info");
+    const restartBtn = document.getElementById("restartBtn");
+
+    let gameOver = false;
 
     const W = canvas.width;
     const H = canvas.height;
@@ -46,25 +83,52 @@
     const bgImg = new Image();
     bgImg.src = "background.jpg";
 
-    const catImg = new Image();
-    catImg.src = "cat.png";
+    const catImages = [];
+    const CAT_COUNT = 5;
+
+    for (let i = 1; i <= CAT_COUNT; i++) {
+      const img = new Image();
+      img.src = `cat${i}.png`;
+      catImages.push(img);
+    }
+
+    // ===== 猫クリック音 =====
+    const catVoice = new Audio("voice.mp3");
+    catVoice.volume = 0.8;
+
+    function playCatVoice() {
+      catVoice.currentTime = 0;
+      catVoice.play().catch(() => { });
+    }
 
     // ===== ゲーム状態 =====
     let cleared = false;
 
     // 猫の表示サイズ（画像の実サイズに関係なくここで統一）
-    const cat = {
-      w: 90,
-      h: 90,
-      x: 0,
-      y: 0,
-      visible: true
-    };
+    const CAT_SIZE = 90;
+    let cats = [];        // 画面に出る猫たち
+    let targetCat = null;   // 探すべき猫
 
-    // 猫の位置をランダムに決める（背景からはみ出さない）
-    function randomizeCatPosition() {
-      cat.x = Math.floor(Math.random() * (W - cat.w));
-      cat.y = Math.floor(Math.random() * (H - cat.h));
+    function createCats() {
+      cats = [];
+
+      const count = Math.floor(Math.random() * 3) + 4; // 4〜6匹
+
+      // 使用する猫画像をランダムに選ぶ
+      const indices = [...Array(CAT_COUNT).keys()]; // [0,1,2,3,4]
+      indices.sort(() => Math.random() - 0.5);
+
+      for (let i = 0; i < count; i++) {
+        cats.push({
+          x: Math.random() * (W - CAT_SIZE),
+          y: Math.random() * (H - CAT_SIZE),
+          w: CAT_SIZE,
+          h: CAT_SIZE,
+          imgIndex: indices[i],      // ★ どの猫画像か
+        });
+      }
+      // ターゲット猫をランダムに決定
+      targetCat = cats[Math.floor(Math.random() * cats.length)];
     }
 
     // クリック座標をキャンバス座標に変換
@@ -79,7 +143,7 @@
     }
 
     // 当たり判定（猫の矩形をクリックしたか）
-    function isHitCat(px, py) {
+    function hitCat(cat, px, py) {
       return (
         px >= cat.x &&
         px <= cat.x + cat.w &&
@@ -94,12 +158,33 @@
 
       const { x, y } = getMousePos(e);
 
-      if (cat.visible && isHitCat(x, y)) {
-        cleared = true;
-        info.textContent = "🎉 クリア！猫を見つけました！";
-      } else {
-        // 外した時のメッセージ（任意）
-        info.textContent = "うーん…そこじゃない！もう一度探してみよう。";
+      if (cleared || gameOver) return;
+
+      let hitAny = false;
+
+      for (const cat of cats) {
+        if (hitCat(cat, x, y)) {
+
+          hitAny = true;
+          playCatVoice();
+          
+          if (cat === targetCat) {
+            cleared = true;
+            info.textContent = "🎉 CLEAR！正解の猫を見つけました！";
+            restartBtn.style.display = "inline-block";
+          } else {
+            gameOver = true;
+            info.textContent = "💥 GAME OVER！違う猫でした…";
+            restartBtn.style.display = "inline-block";
+          }
+          break;
+        }
+      }
+
+      if (!hitAny) {
+        gameOver = true;
+        info.textContent = "💥 GAME OVER！猫じゃないところをクリックしました";
+        restartBtn.style.display = "inline-block";
       }
     });
 
@@ -110,8 +195,48 @@
       ctx.drawImage(bgImg, 0, 0, W, H);
 
       // 猫
-      if (!cleared && cat.visible) {
-        ctx.drawImage(catImg, cat.x, cat.y, cat.w, cat.h);
+      if (!cleared && !gameOver) {
+        for (const cat of cats) {
+          ctx.drawImage(
+            catImages[cat.imgIndex],
+            cat.x,
+            cat.y,
+            cat.w,
+            cat.h
+          );
+        }
+      }
+
+      // ターゲット猫の表示
+      if (!cleared && !gameOver && targetCat) {
+
+        const boxSize = 100;
+        const margin = 10;
+
+        // 背景ボックス
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        ctx.fillRect(W - boxSize - margin, margin, boxSize, boxSize);
+
+        ctx.strokeStyle = "#333";
+        ctx.strokeRect(W - boxSize - margin, margin, boxSize, boxSize);
+
+        // 猫画像
+        ctx.drawImage(
+          catImages[targetCat.imgIndex],
+          W - boxSize - margin + 5,
+          margin + 5,
+          boxSize - 10,
+          boxSize - 10
+        );
+
+        // テキスト
+        ctx.fillStyle = "#000";
+        ctx.font = "12px sans-serif";
+        ctx.fillText(
+          "この猫を探せ！",
+          W - boxSize - margin,
+          margin + boxSize + 14
+        );
       }
 
       // クリア表示（キャンバス上にも表示）
@@ -135,21 +260,38 @@
 
     // ===== 画像ロード完了を待って開始 =====
     function startIfReady() {
-      if (!bgImg.complete || !catImg.complete) return;
-      // 画像が壊れていたり 0x0 のとき対策（読み込み失敗時）
-      if (bgImg.naturalWidth === 0 || catImg.naturalWidth === 0) {
-        info.textContent = "画像の読み込みに失敗しました。ファイル名と場所を確認してください。";
+      if (!bgImg.complete) return;
+      if (bgImg.naturalWidth === 0) {
+        info.textContent = "背景画像の読み込みに失敗しました。";
         return;
       }
-      randomizeCatPosition();
+
+      for (const img of catImages) {
+        if (!img.complete || img.naturalWidth === 0) return;
+      }
+
+      createCats();
       draw();
     }
 
+    // リスタートボタン処理
+    restartBtn.addEventListener("click", restartGame);
+
+    function restartGame() {
+      cleared = false;
+      gameOver = false;
+      info.textContent = "背景の中に猫が隠れています。猫をクリックして見つけよう！";
+      restartBtn.style.display = "none";
+      createCats();
+    }
+
     bgImg.onload = startIfReady;
-    catImg.onload = startIfReady;
+    for (const img of catImages) {
+      img.onload = startIfReady;
+    }
 
     // どちらかがキャッシュで即completeのときの保険
-    setTimeout(startIfReady, 50);
+    // startIfReady();
   </script>
 </body>
 </html>
