@@ -32,6 +32,7 @@ const typingTarget = document.getElementById("typing-text");
 const subText = document.getElementById("sub-text");
 const cursor = document.querySelector(".cursor");
 const hero = document.querySelector('.hero');
+const heroPicture = document.getElementById("hero-picture");
 
 let index = 0;
 let subIndex = 0;
@@ -84,6 +85,13 @@ function typeSub() {
     setTimeout(() => {
       cursor.style.display = "none";
       hero.classList.add('bg-expand');
+
+      // 画像差し替え
+      const source = heroPicture.querySelector("source");
+      const img = heroPicture.querySelector("img");
+      source.srcset = "images/hero2.webp";
+      img.src = "images/hero2.png";
+      heroPicture.classList.add("show");
     }, 800);
   }
 }

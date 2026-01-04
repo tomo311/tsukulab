@@ -30,6 +30,11 @@ p {
   margin-bottom: 16px;
 }
 
+img {
+  max-width: 100%;
+  height: auto;
+}
+
 .font-15 {
   font-size: 0.95rem;
 }
@@ -49,7 +54,7 @@ a:not(.btn):hover {
   position: relative;
   margin: 0;
   text-align: center;
-  padding: 20px 20px 50px;
+  padding: 20px 20px 40px;
 }
 
 .hero::before {
@@ -57,7 +62,7 @@ a:not(.btn):hover {
   position: absolute;
   inset: 0;
 
-  background: linear-gradient(120deg, #d4ecff, #ffffff);
+  background: linear-gradient(120deg, #95bcda, #ffffff);
   clip-path: circle(0% at 50% 50%);
   transition: clip-path 0.8s ease-out;
 
@@ -67,11 +72,6 @@ a:not(.btn):hover {
 .hero.bg-expand::before {
   clip-path: circle(100% at 50% 50%);
 }
-
-/* .hero > * {
-  position: relative;
-  z-index: 1;
-} */
 
 .hero-inner {
   max-width: 900px;
@@ -85,6 +85,8 @@ a:not(.btn):hover {
   max-width: 40vw;
   height: auto;
   margin-bottom: 32px;
+  position: relative;
+  z-index: 10;
 }
 
 @media (max-width: 600px) {
@@ -92,6 +94,36 @@ a:not(.btn):hover {
     width: 120px;
     margin-bottom: 24px;
   }
+}
+
+#hero-picture {
+  position: relative;
+  display: inline-block;
+}
+
+/* hero_picture の背景 */
+#hero-picture.show::after {
+  content: "";
+  position: absolute;
+  inset: -200px;
+
+  background-image: url("images/hero_back.webp");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+
+  z-index: 1;
+  opacity: 0.9;
+
+  /* 少し遊びを入れるなら */
+  transform: scale(1.05);
+}
+
+/* 前面の画像 */
+#hero-picture img {
+  position: relative;
+  z-index: 2;
+  display: block;
 }
 
 .hero h1 {
@@ -419,7 +451,7 @@ a:not(.btn):hover {
   content: "";
   position: absolute;
   top: 12px;
-  left: -16px;
+  left: 0px;
 
   width: 100%;
   height: 100%;
