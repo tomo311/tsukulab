@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8">
+  <title>Watering Plant Game</title>
+
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP";
+      color: white;
+    }
+
+    #game {
+      position: relative;
+      width: 800px;
+      height: 500px;
+      overflow: hidden;
+      border-radius: 16px;
+    }
+
+    /* 背景画像 */
+    #background {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: #87cefa;
+      background-size: cover;
+    }
+
+    /* UI */
+    #HUD {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 18px;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, .5);
+    }
+
+    /* 植物配置 */
+    #plants {
+      position: absolute;
+      bottom: 20px;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-around;
+    }
+
+    /* 各植物 */
+    .plant {
+      width: 140px;
+      height: 180px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    /* 植物画像 */
+    .plant img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    /* 水分バー */
+    .bar {
+      width: 100%;
+      height: 8px;
+      background: #333;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+
+    .bar-inner {
+      height: 100%;
+      background: #4dabf7;
+    }
+
+    /* Game Overウィンドウ */
+    #overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, .75);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    button {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: none;
+      font-size: 16px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="game">
+    <div id="background"></div>
+
+    <div id="HUD">
+      ⏱ Survival time: <span id="time">0.0</span> sec
+    </div>
+
+    <div id="plants"></div>
+
+    <div id="overlay">
+      <div id="result" style="font-size:26px;"></div>
+      <button onclick="restart()">Restart</button>
+    </div>
+  </div>
+
+  <script>
+    /* --------------------
+     画像ファイル対応
+    -------------------- */
+    const PLANT_IMAGES = [
+      "plant1.png", // 1 通常
+      "plant2.png", // 2 水をあげすぎ
+      "plant3.png", // 3 水がこぼれた → game over
+      "plant4.png", // 4 乾いてきた
+      "plant5.png", // 5 限界が近い
+      "plant6.png"  // 6 枯れた → game over
+    ];
+
+    const BACK_IMAGES = [
+      "background1.png", // 朝
+      "background2.png", // 昼
+      "background3.png"  // 夜
+    ];
+
+    /* --------------------
+     ゲーム状態
+    -------------------- */
+    let plants = [];
+    let lastTime = null;
+    let elapsed = 0;
+    let difficulty = 1;
+    let running = true;
+
+    const NUM_PLANTS = 4;
+
+    /* 植物生成 */
+    const plantContainer = document.getElementById("plants");
+    const bg = document.getElementById("background");
+    const timeEl = document.getElementById("time");
+    const overlay = document.getElementById("overlay");
+    const resultEl = document.getElementById("result");
+
+    function initPlants() {
+      plants = [];
+      plantContainer.innerHTML = "";
+
+      for (let i = 0; i < NUM_PLANTS; i++) {
+        const div = document.createElement("div");
+        div.className = "plant";
+
+        const img = document.createElement("img");
+        const bar = document.createElement("div");
+        bar.className = "bar";
+
+        const inner = document.createElement("div");
+        inner.className = "bar-inner";
+
+        bar.appendChild(inner);
+        div.appendChild(img);
+        div.appendChild(bar);
+
+        plantContainer.appendChild(div);
+
+        // 状態作成
+        const plant = {
+          el: div,
+          img,
+          inner,
+          water: 70 + Math.random() * 30, // 初期水分
+          drain: 4 + Math.random() * 4,     // 減り速度(個体差)
+          state: 1
+        };
+
+        // クリックで水やり
+        div.onclick = () => waterPlant(plant);
+
+        plants.push(plant);
+      }
+    }
+
+    /* 水やり処理 */
+    function waterPlant(plant) {
+      plant.water += 25;
+
+      if (plant.water > 120) {
+        plant.state = 2; // 水やり過ぎ
+      }
+    }
+
+    /* --------------------
+     状態更新
+    -------------------- */
+    function updatePlant(plant, dt) {
+      // 水分減少
+      plant.water -= plant.drain * difficulty * dt;
+
+      // 最大 / 最小制限
+      if (plant.water < 0) plant.water = 0;
+
+      // 状態分岐
+      if (plant.water >= 120) {
+        plant.state = 2; // 水やりすぎ
+      }
+      else if (plant.water >= 80) {
+        plant.state = 1; // 通常
+      }
+      else if (plant.water >= 50) {
+        plant.state = 4; // 乾いてきた
+      }
+      else if (plant.water > 10) {
+        plant.state = 5; // 限界
+      }
+      else if (plant.water <= 0) {
+        plant.state = 6; // 枯れた
+        gameOver("植物が枯れました");
+      }
+
+      // 水がこぼれた判定
+      if (plant.water > 140) {
+        plant.state = 3;
+        gameOver("水がこぼれました（あげすぎ）");
+        return;
+      }
+
+      // UI反映
+      plant.img.src = PLANT_IMAGES[plant.state - 1];
+      plant.inner.style.width = plant.water + "%";
+    }
+
+    /* --------------------
+     背景の時間変化
+    -------------------- */
+    function updateBackground() {
+      if (elapsed < 20) {
+        bg.style.backgroundImage = `url(${BACK_IMAGES[0]})`; // 朝
+      } else if (elapsed < 40) {
+        bg.style.backgroundImage = `url(${BACK_IMAGES[1]})`; // 昼
+      } else {
+        bg.style.backgroundImage = `url(${BACK_IMAGES[2]})`; // 夜
+      }
+    }
+
+    /* --------------------
+     メインループ
+    -------------------- */
+    function loop(timestamp) {
+      if (!running) return;
+
+      if (!lastTime) lastTime = timestamp;
+      const dt = (timestamp - lastTime) / 1000;
+      lastTime = timestamp;
+
+      elapsed += dt;
+      timeEl.textContent = elapsed.toFixed(1);
+
+      // 難易度上昇
+      difficulty = 1 + elapsed / 20;
+
+      // 植物更新
+      plants.forEach(p => updatePlant(p, dt));
+
+      // 背景更新
+      updateBackground();
+
+      requestAnimationFrame(loop);
+    }
+
+    /* --------------------
+     ゲームオーバー
+    -------------------- */
+    function gameOver(msg) {
+      running = false;
+      overlay.style.display = "flex";
+      resultEl.textContent = `Game Over！ ${msg} / ${elapsed.toFixed(1)} 秒生存`;
+    }
+
+    /* --------------------
+     Restart
+    -------------------- */
+    function restart() {
+      elapsed = 0;
+      difficulty = 1;
+      running = true;
+      lastTime = null;
+      overlay.style.display = "none";
+      initPlants();
+      requestAnimationFrame(loop);
+    }
+
+    /* --------------------
+     start
+    -------------------- */
+    initPlants();
+    requestAnimationFrame(loop);
+  </script>
+
+</body>
+
+</html>
