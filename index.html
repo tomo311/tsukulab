@@ -48,7 +48,7 @@
     </div>
 
     <div class="text-center margin-bottom">
-      <a href="https://forms.gle/FraxsXaSLXf7o53f6" target="_blank" class="btn" rel="noopener">
+      <a href="#apply-form" class="btn">
         体験ワークショップに申し込む
       </a>
     </div>
@@ -341,10 +341,7 @@
         <br>
 
         <div class="text-center">
-          <a href="https://forms.gle/FraxsXaSLXf7o53f6"
-            target="_blank"
-            class="btn"
-            rel="noopener">
+          <a href="#apply-form" class="btn">
             体験ワークショップに申し込む
           </a>
         </div>
@@ -418,11 +415,42 @@
           </div>
         </div>
 
-        <div class="text-center margin-bottom">
-          <a href="https://forms.gle/FraxsXaSLXf7o53f6" target="_blank" class="btn" rel="noopener">
-            体験ワークショップに申し込む
-          </a>
+        <div>
+          <h3 id="apply-form">
+            お申し込み
+          </h3>
+
+          <form id="my-form" action="https://formspree.io/f/mykkgzdv" method="POST">
+            <label>お名前</label>
+            <input type="text" name="name" placeholder="佐々木 まなぶ" required />
+
+            <label>年齢</label>
+            <input type="text" name="age" placeholder="例: 10、33歳" required />
+            
+            <label>メールアドレス</label>
+            <input type="email" name="email" placeholder="ooo@xxx.xx" required />
+
+            <label>参加希望日</label>
+            <select name="date" required>
+              <option value="1/17(土) 10:00">1/17(土) 10:00（小学４年 ~ 中学生）</option>
+              <option value="1/17(土) 13:00">1/17(土) 13:00（小学４年 ~ 中学生）</option>
+              <option value="1/17(土) 14:30">1/17(土) 14:30（高校生 ~ 大人）</option>
+              <option value="1/25(日) 10:00">1/25(日) 10:00（小学４年 ~ 中学生）</option>
+              <option value="1/25(日) 13:00">1/25(日) 13:00（小学４年 ~ 中学生）</option>
+              <option value="1/25(日) 14:30">1/25(日) 14:30（高校生 ~ 大人）</option>
+              <option value="2/1(日) 10:00">2/1(日) 10:00（小学４年 ~ 中学生）</option>
+              <option value="2/1(日) 13:00">2/1(日) 13:00（小学４年 ~ 中学生）</option>
+              <option value="2/1(日) 14:30">2/1(日) 14:30（高校生 ~ 大人）</option>
+            </select><br>
+
+            <label>ご質問・不明な点（任意）</label>
+            <textarea name="message" placeholder="例：２人で参加しても大丈夫ですか？"></textarea><br>
+
+            <button id="my-form-button">申し込む</button>
+            <p id="my-form-status"></p>
+          </form>
         </div>
+
         <br>
 
         <h3>

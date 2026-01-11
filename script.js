@@ -24,6 +24,38 @@ btn.addEventListener("click", () => {
   btn.textContent = isOpen ? "続きを読む" : "閉じる";
 });
 
+// フォーム送信
+const form = document.getElementById("my-form");
+  
+async function handleSubmit(event) {
+  event.preventDefault();
+  const status = document.getElementById("my-form-status");
+  const data = new FormData(event.target);
+  fetch(event.target.action, {
+    method: form.method,
+    body: data,
+    headers: {
+        'Accept': 'application/json'
+    }
+  }).then(response => {
+    if (response.ok) {
+      status.innerHTML = "ありがとうございます！申し込みを受け付けました。";
+      form.reset()
+    } else {
+      response.json().then(data => {
+        if (Object.hasOwn(data, 'errors')) {
+          status.innerHTML = data["errors"].map(error => error["message"]).join(", ")
+        } else {
+          status.innerHTML = "Oops! There was a problem submitting your form"
+        }
+      })
+    }
+  }).catch(error => {
+    status.innerHTML = "Oops! There was a problem submitting your form"
+  });
+}
+form.addEventListener("submit", handleSubmit)
+
 // hero Animation
 const mainText = "Be Creative!";
 const subTextContent = "つくる人になろう";
