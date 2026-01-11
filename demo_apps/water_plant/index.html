@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="utf-8">
-  <title>Watering Plant Game</title>
+  <title>植物に水をあげるゲーム</title>
 
   <style>
     body {
@@ -99,7 +99,45 @@
       border-radius: 6px;
       border: none;
       font-size: 16px;
+      cursor: pointer;
     }
+
+    #need-water {
+      color: black;
+      position: absolute;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 28px;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 12px;
+      pointer-events: none; /* クリック邪魔しない */
+      user-select: none;
+    }
+    /* ジョウロ */
+    .watering-can {
+      position: absolute;
+      width: 80px;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      animation: pour 0.8s ease-out forwards;
+    }
+
+    @keyframes pour {
+      0% {
+        opacity: 0;
+        transform: translate(-50%, -70%) scale(0.9);
+      }
+      20% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0;
+        transform: translate(-50%, -30%) scale(1);
+      }
+    }
+
   </style>
 </head>
 
@@ -108,15 +146,17 @@
     <div id="background"></div>
 
     <div id="HUD">
-      ⏱ Survival time: <span id="time">0.0</span> sec
+      ⏱ スコア: <span id="time">0.0</span>
     </div>
 
     <div id="plants"></div>
 
     <div id="overlay">
       <div id="result" style="font-size:26px;"></div>
-      <button onclick="restart()">Restart</button>
+      <button onclick="restart()">再スタート</button>
     </div>
+
+    <div id="need-water">水をあげて！</div>
   </div>
 
   <script>
@@ -133,10 +173,13 @@
     ];
 
     const BACK_IMAGES = [
-      "background1.png", // 朝
-      "background2.png", // 昼
-      "background3.png"  // 夜
+      "background1.jpg", // 朝
+      "background1.jpg", // 昼
+      "background1.jpg"  // 夜
     ];
+
+    const waterSound = new Audio("water.mp3");
+    waterSound.volume = 0.5;
 
     /* --------------------
      ゲーム状態
@@ -183,25 +226,53 @@
           img,
           inner,
           water: 70 + Math.random() * 30, // 初期水分
-          drain: 4 + Math.random() * 4,     // 減り速度(個体差)
+          drain: 3.5 + Math.random() * 4,     // 減り速度(個体差)
           state: 1
         };
 
         // クリックで水やり
-        div.onclick = () => waterPlant(plant);
+        div.onclick = (e) => waterPlant(plant, e);
 
         plants.push(plant);
       }
     }
 
     /* 水やり処理 */
-    function waterPlant(plant) {
+    function waterPlant(plant, e) {
+      /* 水量増加 */
       plant.water += 25;
 
       if (plant.water > 120) {
-        plant.state = 2; // 水やり過ぎ
+        plant.state = 2;
       }
+
+      /* --------------------
+        ジョウロ表示
+      -------------------- */
+      const can = document.createElement("img");
+      can.src = "water.png";
+      can.className = "watering-can";
+
+      // ゲーム画面基準の座標に変換
+      const rect = document.getElementById("game").getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      can.style.left = x + "px";
+      can.style.top = y + "px";
+
+      document.getElementById("game").appendChild(can);
+
+      // 一定時間後に削除
+      setTimeout(() => can.remove(), 800);
+
+      /* --------------------
+        水の音
+      -------------------- */
+      waterSound.currentTime = 0;
+      waterSound.play();
     }
+
 
     /* --------------------
      状態更新
