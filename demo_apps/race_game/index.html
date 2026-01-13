@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>レースゲーム</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      margin: 16px;
+    }
+    canvas {
+      border: 1px solid #aaa;
+      border-radius: 10px;
+      background: #f9f9f9;
+      display: block;
+    }
+    .info {
+      margin-top: 8px;
+      font-weight: bold;
+    }
+    .game-container {
+      display: flex;
+      flex-direction: column; /* 縦並び */
+      align-items: center;    /* 横中央 */
+      gap: 8px;
+    }
+    #restartBtn {
+      padding: 10px 20px;
+      font-size: 15px;
+      font-weight: bold;
+      border: none;
+      border-radius: 999px;           /* 丸み */
+      background: linear-gradient(
+        135deg,
+        #4facfe,
+        #00f2fe
+      );
+      color: white;
+      cursor: pointer;
+      box-shadow: 0 4px 0 #2c9be6;
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+  </style>
+</head>
+<body>
+
+<div class="game-container">
+  <h2>マリ◯カート（20秒でゴール）</h2>
+  <canvas id="game" width="400" height="600"></canvas>
+  <button id="restartBtn" style="display:none; margin-top:8px;">
+    リスタート
+  </button>
+  <div class="info" id="info">← → または A D で移動 / スペースでスタート</div>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const info = document.getElementById("info");
+
+const obstacleImage = new Image();
+obstacleImage.src = "obstacle.png"; // ←障害物の画像
+
+const carImage = new Image();
+carImage.src = "car.png"; // ←車の画像
+
+const restartBtn = document.getElementById("restartBtn");
+
+
+const W = canvas.width;
+const H = canvas.height;
+
+// ===== プレイヤー =====
+const player = {
+  w: 40,
+  h: 60,
+  x: W / 2 - 20,
+  y: H - 80,
+  speed: 6
+};
+
+// ===== 障害物 =====
+let obstacles = [];
+const obstacleW = 40;
+const obstacleH = 60;
+const obstacleSpeed = 4;
+
+// ===== BGM =====
+const bgm = new Audio("background.mp3");
+bgm.loop = true;      // ← ループ再生
+bgm.volume = 0.5; 
+
+const hitSound = new Audio("hit.mp3");
+hitSound.volume = 0.7;
+
+// ===== ゲーム状態 =====
+let keys = {};
+let running = false;
+let startTime = null;
+const GOAL_TIME = 20; // 秒
+let gameOver = false;
+let cleared = false;
+
+// ===== 入力 =====
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+
+  if (e.key === " " && !running && !gameOver && !cleared) {
+    startGame();
+  }
+});
+
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// ===== 初期化 =====
+function startGame() {
+  running = true;
+  startTime = performance.now();
+  obstacles = [];
+  gameOver = false;
+  cleared = false;
+  info.textContent = "走行中…";
+
+  // BGM 再生
+  bgm.currentTime = 0; // 最初から
+  bgm.play();
+}
+
+// ===== 障害物生成 =====
+function spawnObstacle() {
+  const x = Math.random() * (W - obstacleW);
+  obstacles.push({
+    x: x,
+    y: -obstacleH
+  });
+}
+
+// ===== 当たり判定 =====
+function hit(a, b) {
+  return (
+    a.x < b.x + obstacleW &&
+    a.x + a.w > b.x &&
+    a.y < b.y + obstacleH &&
+    a.y + a.h > b.y
+  );
+}
+
+// ===== 更新 =====
+function update() {
+  if (!running) return;
+
+  // プレイヤー移動
+  if (keys["ArrowLeft"] || keys["a"]) player.x -= player.speed;
+  if (keys["ArrowRight"] || keys["d"]) player.x += player.speed;
+
+  player.x = Math.max(0, Math.min(W - player.w, player.x));
+
+  // 障害物移動
+  for (let o of obstacles) {
+    o.y += obstacleSpeed;
+    if (hit(player, o)) {
+      gameOver = true;
+      running = false;
+      hitSound.play();
+      bgm.pause();
+      restartBtn.style.display = "inline-block";
+      info.textContent = "💥 GAME OVER（障害物に衝突）";
+    }
+  }
+
+  // 画面外削除
+  obstacles = obstacles.filter(o => o.y < H + obstacleH);
+
+  // 障害物追加
+  if (Math.random() < 0.03) {
+    spawnObstacle();
+  }
+
+  // ゴール判定
+  const elapsed = (performance.now() - startTime) / 1000;
+  if (elapsed >= GOAL_TIME) {
+    cleared = true;
+    running = false;
+    bgm.pause();
+    restartBtn.style.display = "inline-block";
+    info.textContent = "🏁 CLEAR！ゴールしました！";
+  }
+}
+
+// ===== リスタートボタン =====
+restartBtn.addEventListener("click", () => {
+  restartBtn.style.display = "none";
+  startGame();
+});
+
+// ===== 描画 =====
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // 道
+  ctx.fillStyle = "#ddd";
+  ctx.fillRect(100, 0, 200, H);
+
+  // プレイヤー
+  ctx.drawImage(
+  carImage,
+  player.x,
+  player.y,
+  player.w,
+  player.h
+  );
+
+  // 障害物
+for (let o of obstacles) {
+  ctx.drawImage(
+    obstacleImage,
+    o.x,
+    o.y,
+    obstacleW,
+    obstacleH
+  );
+}
+
+  // タイマー
+  if (running) {
+    const t = Math.max(
+      0,
+      GOAL_TIME - Math.floor((performance.now() - startTime) / 1000)
+    );
+    ctx.fillStyle = "#000";
+    ctx.font = "20px sans-serif";
+    ctx.fillText(`残り ${t} 秒`, 10, 30);
+  }
+
+  if (!running && !gameOver && !cleared) {
+    ctx.fillStyle = "#000";
+    ctx.font = "20px sans-serif";
+    ctx.fillText("SPACEでスタート", 100, H / 2);
+  }
+}
+
+// ===== ループ =====
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
