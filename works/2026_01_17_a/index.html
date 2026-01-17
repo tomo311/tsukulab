@@ -1,0 +1,844 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bike Jump</title>
+  <style>
+    :root {
+      --bg1: #0b1020;
+      --bg2: #121a33;
+      --card: #121a2a;
+      --line: rgba(255, 255, 255, .12);
+      --txt: rgba(255, 255, 255, .9);
+      --sub: rgba(255, 255, 255, .65);
+      --accent: #7cf0ff;
+      --danger: #ff5c7a;
+      --good: #67ff9a;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--txt);
+      font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      background: radial-gradient(1200px 600px at 30% 10%, #1b2b6a 0%, transparent 55%),
+        radial-gradient(900px 500px at 80% 30%, #0c6b6b 0%, transparent 60%),
+        linear-gradient(180deg, var(--bg2), var(--bg1));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+
+    .wrap {
+      width: min(920px, 100%);
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .hud {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(10, 12, 20, .55);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, .35);
+    }
+
+    .hud .left {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, .04);
+      font-size: 14px;
+      color: var(--sub);
+    }
+
+    .pill b {
+      color: var(--txt);
+      font-weight: 700
+    }
+
+    .hint {
+      color: var(--sub);
+      font-size: 14px;
+      line-height: 1.3;
+      text-align: right;
+    }
+
+    .gameCard {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(10, 12, 20, .45);
+      box-shadow: 0 18px 60px rgba(0, 0, 0, .35);
+      overflow: hidden;
+      position: relative;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 16 / 9;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, 0)),
+        radial-gradient(900px 400px at 30% 20%, rgba(124, 240, 255, .10), transparent 60%),
+        radial-gradient(900px 450px at 80% 30%, rgba(103, 255, 154, .08), transparent 60%),
+        linear-gradient(180deg, #0e1430, #070a14);
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    .panel {
+      pointer-events: auto;
+      width: min(520px, 92%);
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(8, 10, 16, .72);
+      backdrop-filter: blur(12px);
+      padding: 18px;
+      text-align: center;
+    }
+
+    .title {
+      font-size: 22px;
+      margin: 0 0 10px;
+      letter-spacing: .2px;
+    }
+
+    .desc {
+      margin: 0 0 14px;
+      color: var(--sub);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .btnRow {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      appearance: none;
+      border: none;
+      cursor: pointer;
+      border-radius: 14px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #071018;
+      background: linear-gradient(180deg, #8bf7ff, #5fe9ff);
+      box-shadow: 0 12px 28px rgba(124, 240, 255, .18);
+    }
+
+    button.secondary {
+      color: var(--txt);
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+
+    .small {
+      margin-top: 10px;
+      font-size: 12px;
+      color: rgba(255, 255, 255, .45);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="hud">
+      <div class="left">
+        <div class="pill">Score: <b id="score">0</b></div>
+        <div class="pill">Speed: <b id="speed">1.0x</b></div>
+        <div class="pill">Best: <b id="best">0</b></div>
+      </div>
+      <div class="hint">
+        Space / Click / Tap：ジャンプ<br>
+        空中でもう1回：高くジャンプ
+      </div>
+    </div>
+
+    <div class="gameCard">
+      <canvas id="cv" width="960" height="540"></canvas>
+
+      <div class="overlay" id="overlay">
+        <div class="panel">
+          <h2 class="title" id="ovTitle">Bike Jump</h2>
+          <p class="desc" id="ovDesc">
+            穴・ブロックを避けて進もう。<br>
+            稲妻を取ると一定時間スピードアップ！
+          </p>
+          <div class="btnRow">
+            <button id="startBtn">Start</button>
+            <button class="secondary" id="restartBtn" style="display:none;">Restart</button>
+          </div>
+          <div class="small">※ PCでもスマホでもOK（タップ対応）</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const cv = document.getElementById("cv");
+      const ctx = cv.getContext("2d");
+
+      const $score = document.getElementById("score");
+      const $speed = document.getElementById("speed");
+      const $best = document.getElementById("best");
+      const $overlay = document.getElementById("overlay");
+      const $ovTitle = document.getElementById("ovTitle");
+      const $ovDesc = document.getElementById("ovDesc");
+      const $startBtn = document.getElementById("startBtn");
+      const $restartBtn = document.getElementById("restartBtn");
+
+      const jumpSound = new Audio("jump.mp3");
+      jumpSound.volume = 0.5;   // 音量（0.0〜1.0）
+
+      function playJumpSound() {
+        // 連続ジャンプでも鳴るようにする
+        jumpSound.currentTime = 0;
+        jumpSound.play().catch(() => {
+          // 初回操作前などで失敗しても無視
+        });
+      }
+
+      // ===== Utilities =====
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+      const rand = (a, b) => a + Math.random() * (b - a);
+
+      // ===== Game constants =====
+      const W = cv.width, H = cv.height;
+      const groundY = Math.floor(H * 0.78);
+      const gravity = 0.9;
+
+      // ===== State =====
+      let running = false;
+      let gameOver = false;
+      let tPrev = 0;
+
+      let worldX = 0;
+      let baseSpeed = 6.0;
+      let speedMul = 1.0;
+
+      let score = 0;
+      let best = Number(localStorage.getItem("bike_best") || "0");
+
+      $best.textContent = best;
+
+      // Speed boost
+      let boostTimer = 0; // frames-ish (we'll treat as ms)
+      const boostDurationMs = 3500;
+      const boostMul = 1.45;
+
+      // Player (bike)
+      const player = {
+        x: Math.floor(W * 0.20),
+        y: groundY - 52,
+        w: 84,
+        h: 48,
+        vy: 0,
+        onGround: true,
+        jumpsUsed: 0, // 0,1,2
+        invulnMs: 0
+      };
+
+      // Obstacles / items spawn lists
+      /** blocks: {x, y, w, h} */
+      const blocks = [];
+      /** pits: {x, w} (gap on ground) */
+      const pits = [];
+      /** boosts: {x, y, r} */
+      const boosts = [];
+
+      let nextSpawnX = 520;
+      let nextPitX = 760;
+
+      function reset() {
+        worldX = 0;
+        baseSpeed = 6.0;
+        speedMul = 1.0;
+        boostTimer = 0;
+
+        score = 0;
+        gameOver = false;
+
+        player.y = groundY - 52;
+        player.vy = 0;
+        player.onGround = true;
+        player.jumpsUsed = 0;
+
+        blocks.length = 0;
+        pits.length = 0;
+        boosts.length = 0;
+
+        nextSpawnX = 520;
+        nextPitX = 760;
+
+        $score.textContent = "0";
+        $speed.textContent = "1.0x";
+      }
+
+      // ===== Input =====
+      function jump() {
+        if (!running || gameOver) return;
+
+        if (player.onGround) {
+          player.vy = -14.5;
+          player.onGround = false;
+          player.jumpsUsed = 1;
+          playJumpSound();
+        }
+        else if (player.jumpsUsed === 1) {
+          player.vy = -18.5;
+          player.jumpsUsed = 2;
+          playJumpSound();
+        }
+      }
+
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Space" || e.code === "ArrowUp") {
+          e.preventDefault();
+          if (!running) start();
+          else if (gameOver) restart();
+          else jump();
+        }
+        if (e.code === "KeyR") {
+          if (running) restart();
+        }
+      }, { passive: false });
+
+      // click/tap
+      const pointerHandler = (e) => {
+        e.preventDefault();
+        if (!running) start();
+        else if (gameOver) restart();
+        else jump();
+      };
+      cv.addEventListener("pointerdown", pointerHandler, { passive: false });
+
+      $startBtn.addEventListener("click", () => start());
+      $restartBtn.addEventListener("click", () => restart());
+
+      function start() {
+        if (running) return;
+        reset();
+        running = true;
+        $overlay.style.display = "none";
+        requestAnimationFrame(loop);
+      }
+
+      function restart() {
+        reset();
+        gameOver = false;
+        running = true;
+        $overlay.style.display = "none";
+      }
+
+      function endGame(reason) {
+        gameOver = true;
+        running = true; // keep loop drawing
+        $ovTitle.textContent = "Game Over";
+        $ovDesc.innerHTML = `${reason}<br>Space / Tap / Click でリスタート`;
+        $startBtn.style.display = "none";
+        $restartBtn.style.display = "";
+        $overlay.style.display = "flex";
+
+        if (score > best) {
+          best = score;
+          localStorage.setItem("bike_best", String(best));
+          $best.textContent = best;
+        }
+      }
+
+      // ===== Spawning =====
+      function spawnBlock(x) {
+        const w = rand(34, 56);
+        const h = rand(34, 64);
+        const y = groundY - h;
+        blocks.push({ x, y, w, h });
+      }
+
+      function spawnPit(x) {
+        const w = rand(90, 160);
+        pits.push({ x, w });
+      }
+
+      function spawnBoost(x) {
+        const r = 14;
+        const y = groundY - rand(110, 170);
+        boosts.push({ x, y, r });
+      }
+
+      function ensureSpawns() {
+        // spawn blocks & boosts
+        while (nextSpawnX < worldX + W + 260) {
+          const roll = Math.random();
+          if (roll < 0.22) spawnBlock(nextSpawnX);
+          else spawnBoost(nextSpawnX);
+
+          nextSpawnX += rand(220, 360);
+        }
+
+        // spawn pits (gaps)
+        while (nextPitX < worldX + W + 260) {
+          // pits not too frequent
+          if (Math.random() < 0.65) spawnPit(nextPitX);
+          nextPitX += rand(520, 760);
+        }
+      }
+
+      // ===== Collision helpers =====
+      function rectsIntersect(a, b) {
+        return (
+          a.x < b.x + b.w &&
+          a.x + a.w > b.x &&
+          a.y < b.y + b.h &&
+          a.y + a.h > b.y
+        );
+      }
+
+      function circleRectHit(cx, cy, r, rx, ry, rw, rh) {
+        const nx = clamp(cx, rx, rx + rw);
+        const ny = clamp(cy, ry, ry + rh);
+        const dx = cx - nx, dy = cy - ny;
+        return (dx * dx + dy * dy) <= r * r;
+      }
+
+      function isGroundAt(xWorld) {
+        // if inside any pit gap => no ground
+        for (const p of pits) {
+          if (xWorld >= p.x && xWorld <= p.x + p.w) return false;
+        }
+        return true;
+      }
+
+      // ===== Update =====
+      function update(dtMs) {
+        // speed progression
+        const prog = Math.min(2.2, 1.0 + score / 2600); // slowly increases with score
+        baseSpeed = 6.0 * prog;
+
+        if (boostTimer > 0) {
+          boostTimer -= dtMs;
+          speedMul = boostMul;
+          if (boostTimer <= 0) {
+            boostTimer = 0;
+            speedMul = 1.0;
+          }
+        }
+
+        const spd = baseSpeed * speedMul;
+        worldX += spd;
+
+        // score: based on distance
+        score = Math.floor(worldX / 10);
+        $score.textContent = String(score);
+        $speed.textContent = (spd / 6.0).toFixed(1) + "x";
+
+        ensureSpawns();
+
+        // player physics
+        player.vy += gravity;
+        player.y += player.vy;
+
+        // Determine ground under player's center
+        const footX = worldX + player.x + player.w * 0.55; // player's forward-ish wheel position
+        const hasGround = isGroundAt(footX);
+
+        if (hasGround) {
+          const groundTop = groundY;
+          if (player.y + player.h >= groundTop) {
+            player.y = groundTop - player.h;
+            player.vy = 0;
+            player.onGround = true;
+            player.jumpsUsed = 0;
+          } else {
+            player.onGround = false;
+          }
+        } else {
+          // falling into a pit
+          player.onGround = false;
+        }
+
+        // if fell below screen => game over
+        if (player.y > H + 40) {
+          endGame("穴に落ちた！");
+        }
+
+        // collisions: blocks
+        const playerRect = { x: player.x, y: player.y, w: player.w, h: player.h };
+        for (const b of blocks) {
+          const bx = b.x - worldX;
+          const br = { x: bx, y: b.y, w: b.w, h: b.h };
+          if (rectsIntersect(playerRect, br)) {
+            endGame("ブロックにぶつかった！");
+            break;
+          }
+        }
+
+        // boosts pick up
+        for (let i = boosts.length - 1; i >= 0; i--) {
+          const it = boosts[i];
+          const ix = it.x - worldX;
+          const cx = ix, cy = it.y;
+
+          // Approx: bike body rectangle as pickup target
+          if (circleRectHit(cx, cy, it.r, playerRect.x, playerRect.y, playerRect.w, playerRect.h)) {
+            boosts.splice(i, 1);
+            boostTimer = boostDurationMs;
+          }
+        }
+
+        // cleanup offscreen
+        while (blocks.length && blocks[0].x - worldX < -200) blocks.shift();
+        while (pits.length && pits[0].x + pits[0].w - worldX < -200) pits.shift();
+        while (boosts.length && boosts[0].x - worldX < -240) boosts.shift();
+      }
+
+      // ===== Draw =====
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+
+        // Sky stars
+        ctx.save();
+        ctx.globalAlpha = 0.45;
+        for (let i = 0; i < 60; i++) {
+          const sx = (i * 137.5 + (worldX * 0.08)) % W;
+          const sy = (i * 53.2) % (groundY - 120);
+          const r = (i % 3) ? 1.2 : 2.0;
+          ctx.beginPath();
+          ctx.arc(sx, sy, r, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(255,255,255,.55)";
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // Parallax hills
+        ctx.save();
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = "rgba(124,240,255,.12)";
+        for (let i = 0; i < 5; i++) {
+          const x = ((i * 260) - (worldX * 0.25 % 260)) - 80;
+          ctx.beginPath();
+          ctx.ellipse(x + 180, groundY - 60, 220, 80, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // Ground (with pits)
+        ctx.save();
+        // Base ground line
+        ctx.strokeStyle = "rgba(255,255,255,.10)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, groundY + 1);
+        ctx.lineTo(W, groundY + 1);
+        ctx.stroke();
+
+        // Ground segments
+        const segStart = worldX;
+        const segEnd = worldX + W;
+
+        // Build visible segments by cutting pits out
+        // We'll step across visible range and skip pit intervals.
+        let x = segStart;
+        // Collect pits that overlap view
+        const viewPits = pits
+          .filter(p => p.x + p.w > segStart - 50 && p.x < segEnd + 50)
+          .sort((a, b) => a.x - b.x);
+
+        ctx.fillStyle = "rgba(255,255,255,.06)";
+        for (const p of viewPits) {
+          // draw segment before pit
+          if (p.x > x) {
+            const sx = x - worldX;
+            const sw = (p.x - x);
+            ctx.fillRect(sx, groundY, sw, H - groundY);
+          }
+          // draw pit (hole)
+          const hx = p.x - worldX;
+          ctx.clearRect(hx, groundY, p.w, H - groundY); // keep as dark gap
+          // highlight edges
+          ctx.fillStyle = "rgba(255,92,122,.10)";
+          ctx.fillRect(hx, groundY, 6, H - groundY);
+          ctx.fillRect(hx + p.w - 6, groundY, 6, H - groundY);
+          ctx.fillStyle = "rgba(255,255,255,.06)";
+          x = Math.max(x, p.x + p.w);
+        }
+        // final segment
+        if (x < segEnd) {
+          ctx.fillRect(x - worldX, groundY, (segEnd - x), H - groundY);
+        }
+        ctx.restore();
+
+        // Blocks
+        for (const b of blocks) {
+          const bx = b.x - worldX;
+          if (bx > W + 100 || bx < -200) continue;
+
+          ctx.save();
+          // shadow
+          ctx.fillStyle = "rgba(0,0,0,.35)";
+          ctx.fillRect(bx + 6, b.y + 8, b.w, b.h);
+
+          // body
+          const grd = ctx.createLinearGradient(bx, b.y, bx, b.y + b.h);
+          grd.addColorStop(0, "rgba(255,255,255,.22)");
+          grd.addColorStop(1, "rgba(255,255,255,.08)");
+          ctx.fillStyle = grd;
+          ctx.strokeStyle = "rgba(255,255,255,.16)";
+          ctx.lineWidth = 2;
+          roundRect(ctx, bx, b.y, b.w, b.h, 10);
+          ctx.fill();
+          ctx.stroke();
+
+          // stripe
+          ctx.globalAlpha = 0.6;
+          ctx.fillStyle = "rgba(255,92,122,.25)";
+          ctx.fillRect(bx + 8, b.y + 10, b.w - 16, 8);
+          ctx.restore();
+        }
+
+        // Boost items (lightning)
+        for (const it of boosts) {
+          const ix = it.x - worldX;
+          if (ix > W + 120 || ix < -200) continue;
+
+          ctx.save();
+          // glow
+          ctx.globalAlpha = 0.55;
+          ctx.beginPath();
+          ctx.arc(ix, it.y, it.r * 2.2, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(103,255,154,.20)";
+          ctx.fill();
+
+          // core circle
+          ctx.globalAlpha = 1;
+          ctx.beginPath();
+          ctx.arc(ix, it.y, it.r, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(255,255,255,.10)";
+          ctx.strokeStyle = "rgba(103,255,154,.50)";
+          ctx.lineWidth = 2;
+          ctx.fill();
+          ctx.stroke();
+
+          // lightning bolt
+          ctx.beginPath();
+          ctx.moveTo(ix - 4, it.y - 10);
+          ctx.lineTo(ix + 2, it.y - 10);
+          ctx.lineTo(ix - 2, it.y + 1);
+          ctx.lineTo(ix + 6, it.y + 1);
+          ctx.lineTo(ix - 1, it.y + 14);
+          ctx.lineTo(ix + 1, it.y + 4);
+          ctx.lineTo(ix - 6, it.y + 4);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(103,255,154,.95)";
+          ctx.fill();
+
+          ctx.restore();
+        }
+
+        // Player (bike)
+        drawBike(player.x, player.y, player.w, player.h);
+
+        // Boost meter indicator
+        if (boostTimer > 0) {
+          const p = clamp(boostTimer / boostDurationMs, 0, 1);
+          ctx.save();
+          ctx.globalAlpha = 0.9;
+          ctx.fillStyle = "rgba(103,255,154,.18)";
+          ctx.strokeStyle = "rgba(103,255,154,.55)";
+          ctx.lineWidth = 2;
+
+          const bw = 220, bh = 14;
+          const bx = 16, by = 16;
+          roundRect(ctx, bx, by, bw, bh, 9);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = "rgba(103,255,154,.75)";
+          roundRect(ctx, bx + 2, by + 2, (bw - 4) * p, bh - 4, 8);
+          ctx.fill();
+
+          ctx.restore();
+        }
+
+        // little vignette
+        ctx.save();
+        const v = ctx.createRadialGradient(W * 0.5, H * 0.4, 60, W * 0.5, H * 0.4, 560);
+        v.addColorStop(0, "rgba(0,0,0,0)");
+        v.addColorStop(1, "rgba(0,0,0,.35)");
+        ctx.fillStyle = v;
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
+
+        // Game over text (subtle if overlay hidden)
+        if (gameOver) {
+          ctx.save();
+          ctx.globalAlpha = 0.35;
+          ctx.fillStyle = "rgba(255,255,255,.9)";
+          ctx.font = "700 28px system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif";
+          ctx.fillText("GAME OVER", 16, 78);
+          ctx.restore();
+        }
+      }
+
+      function drawBike(x, y, w, h) {
+        const wheelR = 16;
+        const wheelY = y + h;
+        const rearX = x + 18;
+        const frontX = x + w - 18;
+
+        // wheels
+        ctx.save();
+        ctx.lineWidth = 4;
+
+        // wheel shadow
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath(); ctx.arc(rearX + 5, wheelY + 6, wheelR, 0, Math.PI * 2); ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fill();
+        ctx.beginPath(); ctx.arc(frontX + 5, wheelY + 6, wheelR, 0, Math.PI * 2); ctx.fill();
+
+        // wheel
+        ctx.globalAlpha = 1;
+        drawWheel(rearX, wheelY, wheelR);
+        drawWheel(frontX, wheelY, wheelR);
+
+        // frame
+        ctx.strokeStyle = "rgba(124,240,255,.9)";
+        ctx.lineCap = "round";
+
+        const seatX = x + 36, seatY = y + 18;
+        const midX = x + 48, midY = y + 30;
+
+        ctx.beginPath();
+        ctx.moveTo(rearX, wheelY);
+        ctx.lineTo(midX, midY);
+        ctx.lineTo(frontX, wheelY);
+        ctx.lineTo(rearX, wheelY);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(midX, midY);
+        ctx.lineTo(seatX, seatY);
+        ctx.stroke();
+
+        // handle
+        ctx.beginPath();
+        ctx.moveTo(frontX - 8, wheelY - 22);
+        ctx.lineTo(frontX + 6, wheelY - 34);
+        ctx.stroke();
+
+        // body (rider-ish simple block)
+        ctx.fillStyle = "rgba(255,255,255,.10)";
+        ctx.strokeStyle = "rgba(255,255,255,.18)";
+        ctx.lineWidth = 2;
+        roundRect(ctx, x + 26, y + 4, 30, 22, 10);
+        ctx.fill();
+        ctx.stroke();
+
+        // "jump dust" when near ground
+        if (player.onGround) {
+          ctx.globalAlpha = 0.5;
+          ctx.fillStyle = "rgba(255,255,255,.10)";
+          for (let i = 0; i < 4; i++) {
+            const px = x - 10 - i * 10;
+            const py = groundY + 10 + (i % 2) * 4;
+            ctx.beginPath();
+            ctx.arc(px, py, 6 - i, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        ctx.restore();
+      }
+
+      function drawWheel(cx, cy, r) {
+        ctx.save();
+        ctx.fillStyle = "rgba(255,255,255,.06)";
+        ctx.strokeStyle = "rgba(255,255,255,.22)";
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // spokes
+        ctx.strokeStyle = "rgba(255,255,255,.18)";
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + (worldX * 0.06);
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + Math.cos(a) * (r - 2), cy + Math.sin(a) * (r - 2));
+          ctx.stroke();
+        }
+        // hub
+        ctx.fillStyle = "rgba(124,240,255,.35)";
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function roundRect(ctx, x, y, w, h, r) {
+        const rr = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + rr, y);
+        ctx.arcTo(x + w, y, x + w, y + h, rr);
+        ctx.arcTo(x + w, y + h, x, y + h, rr);
+        ctx.arcTo(x, y + h, x, y, rr);
+        ctx.arcTo(x, y, x + w, y, rr);
+        ctx.closePath();
+      }
+
+      // ===== Main loop =====
+      function loop(ts) {
+        if (!tPrev) tPrev = ts;
+        const dt = clamp(ts - tPrev, 0, 40);
+        tPrev = ts;
+
+        if (running && !gameOver) update(dt);
+        draw();
+
+        requestAnimationFrame(loop);
+      }
+
+      // Show initial overlay
+      $overlay.style.display = "flex";
+    })();
+  </script>
+</body>
+
+</html>
