@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bird vs AI - Flappy Duel</title>
+  <style>
+    :root {
+      color-scheme: light;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      display: flex;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+      background: #f6f7fb;
+    }
+
+    .wrap {
+      width: min(900px, 96vw);
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+    }
+
+    .top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .title {
+      font-weight: 800;
+      letter-spacing: .2px;
+    }
+
+    .hint {
+      opacity: .75;
+      font-size: 14px;
+    }
+
+    .panel {
+      background: #fff;
+      border: 1px solid rgba(0, 0, 0, .08);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .06);
+    }
+
+    canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 12px;
+      background: linear-gradient(#cfe9ff, #f7fbff 65%, #dff5d8);
+    }
+
+    .hud {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 14px;
+    }
+
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 0, 0, .10);
+      background: rgba(255, 255, 255, .75);
+      backdrop-filter: blur(6px);
+    }
+
+    .pill strong {
+      font-weight: 800;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      opacity: .8;
+      font-size: 13px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="title">Bird vs AI（Flappy対戦）</div>
+      <div class="hint">Space：飛ぶ / R：リスタート（プレイヤー&AIが両方死ぬまで継続）</div>
+    </div>
+
+    <div class="panel">
+      <div class="hud" style="margin-bottom:10px;">
+        <div class="pill">Player：<strong id="pState">ALIVE</strong></div>
+        <div class="pill">AI：<strong id="aState">ALIVE</strong></div>
+        <div class="pill">Player Score：<strong id="pScore">0</strong> / 10（Clear）</div>
+        <div class="pill">Player High Score：<strong id="hiScore">0</strong></div>
+      </div>
+      <canvas id="cv" width="900" height="520"></canvas>
+      <div class="footer" style="margin-top:10px;">
+        <div>壁に当たる or 画面下に落ちたら死亡</div>
+        <div>プレイヤーが10回くぐるとCLEAR表示（ゲーム自体はAIが死ぬまで続く）</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const canvas = document.getElementById("cv");
+      const ctx = canvas.getContext("2d");
+
+      const elPState = document.getElementById("pState");
+      const elAState = document.getElementById("aState");
+      const elPScore = document.getElementById("pScore");
+      const elHiScore = document.getElementById("hiScore");
+
+      // ======= Game constants =======
+      const W = canvas.width;
+      const H = canvas.height;
+
+      const GROUND_Y = H - 40;
+      const GRAVITY = 0.55;
+      const FLAP_V = -9.2;
+
+      const PIPE_W = 70;
+      const PIPE_GAP = 165;
+      const PIPE_SPEED = 3.2;
+      const PIPE_INTERVAL = 120; // frames
+      const PIPE_MARGIN_TOP = 50;
+
+      const CLEAR_TARGET = 10;
+
+      // ======= Sounds =======
+      const soundGoal = new Audio("goal.mp3");
+      const soundFly = new Audio("fly.mp3");
+      const soundFall = new Audio("fall.mp3");
+
+      // 多重再生対策（連打しても鳴る）
+      function playSound(audio) {
+        audio.currentTime = 0;
+        audio.play().catch(() => { });
+      }
+
+      // ======= Storage =======
+      const HI_KEY = "flappy_duel_highscore_v1";
+      const getHigh = () => Number(localStorage.getItem(HI_KEY) || "0");
+      const setHigh = (v) => localStorage.setItem(HI_KEY, String(v));
+
+      // ======= Entities =======
+      function makeBird(x, y, color) {
+        return {
+          x, y,
+          r: 14,
+          vy: 0,
+          alive: true,
+          score: 0,
+          cleared: false,
+          color,
+          lastFlapFrame: -9999,
+        };
+      }
+
+      let player, ai, pipes, frame, running;
+      let message = "";
+
+      function reset() {
+        player = makeBird(230, H * 0.45, "rgba(40,120,255,0.95)");
+        ai = makeBird(320, H * 0.45, "rgba(255,90,90,0.95)");
+
+        pipes = [];
+        frame = 0;
+        running = true;
+        message = "Spaceでスタート！";
+
+        elHiScore.textContent = String(getHigh());
+        syncHud();
+      }
+
+      function syncHud() {
+        elPState.textContent = player.alive ? "ALIVE" : "DEAD";
+        elAState.textContent = ai.alive ? "ALIVE" : "DEAD";
+        elPScore.textContent = String(player.score);
+        elHiScore.textContent = String(getHigh());
+      }
+
+      // ======= Pipes =======
+      function spawnPipe() {
+        // gap center between [PIPE_MARGIN_TOP + gap/2, GROUND_Y - gap/2 - 10]
+        const minC = PIPE_MARGIN_TOP + PIPE_GAP / 2;
+        const maxC = (GROUND_Y - 10) - PIPE_GAP / 2;
+        const center = minC + Math.random() * (maxC - minC);
+
+        pipes.push({
+          x: W + 10,
+          gapTop: center - PIPE_GAP / 2,
+          gapBot: center + PIPE_GAP / 2,
+          passedByPlayer: false,
+          passedByAI: false,
+        });
+      }
+
+      function rectCircleCollide(rx, ry, rw, rh, cx, cy, cr) {
+        const nx = Math.max(rx, Math.min(cx, rx + rw));
+        const ny = Math.max(ry, Math.min(cy, ry + rh));
+        const dx = cx - nx;
+        const dy = cy - ny;
+        return (dx * dx + dy * dy) <= cr * cr;
+      }
+
+      function checkCollision(bird) {
+        if (!bird.alive) return;
+
+        // ground
+        if (bird.y + bird.r >= GROUND_Y) {
+          // ★ 効果音（プレイヤーのみ）
+          if (bird === player) {
+            playSound(soundFall);
+          }
+          bird.alive = false;
+          return;
+        }
+        // ceiling (optional)
+        if (bird.y - bird.r <= 0) {
+          bird.y = bird.r;
+          bird.vy = 0;
+        }
+
+        // pipes
+        for (const p of pipes) {
+          const topRect = { x: p.x, y: 0, w: PIPE_W, h: p.gapTop };
+          const botRect = { x: p.x, y: p.gapBot, w: PIPE_W, h: GROUND_Y - p.gapBot };
+
+          if (rectCircleCollide(topRect.x, topRect.y, topRect.w, topRect.h, bird.x, bird.y, bird.r) ||
+            rectCircleCollide(botRect.x, botRect.y, botRect.w, botRect.h, bird.x, bird.y, bird.r)) {
+            bird.alive = false;
+            return;
+          }
+        }
+      }
+
+      function updateScore() {
+        for (const p of pipes) {
+          const pipeMid = p.x + PIPE_W;
+
+          if (player.alive && !p.passedByPlayer && pipeMid < player.x - player.r) {
+            p.passedByPlayer = true;
+            player.score++;
+            if (player.score >= CLEAR_TARGET && !player.cleared) {
+              player.cleared = true;
+
+              // ★ ゴール音
+              playSound(soundGoal);
+            }
+
+            // update high score immediately (even if later死ぬ)
+            const hi = getHigh();
+            if (player.score > hi) setHigh(player.score);
+          }
+
+          if (ai.alive && !p.passedByAI && pipeMid < ai.x - ai.r) {
+            p.passedByAI = true;
+            ai.score++;
+            if (ai.score >= CLEAR_TARGET) ai.cleared = true; // AIにも一応付けておく（表示はしない）
+          }
+        }
+      }
+
+      // ======= Controls =======
+      function flap(bird) {
+        if (!bird.alive) return;
+        bird.vy = FLAP_V;
+        bird.lastFlapFrame = frame;
+
+        // ★ 効果音（プレイヤーのみ）
+        if (bird === player) {
+          playSound(soundFly);
+        }
+
+        if (message.includes("Spaceでスタート")) message = "";
+      }
+
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Space") {
+          e.preventDefault();
+          flap(player);
+        }
+        if (e.key.toLowerCase() === "r") {
+          reset();
+        }
+      });
+
+      // ======= Simple AI =======
+      function aiThink() {
+        if (!ai.alive) return;
+
+        // ★ 上昇中は判断しない
+        if (ai.vy < 0) return;
+
+        let next = null;
+        for (const p of pipes) {
+          if (p.x + PIPE_W >= ai.x - ai.r) { next = p; break; }
+        }
+
+        let targetY = H * 0.45;
+        if (next) {
+          const gapCenter = (next.gapTop + next.gapBot) / 2;
+          targetY = gapCenter - 10;
+        }
+
+        const cooldown = 10;
+        const predictY = ai.y + ai.vy * 6 + GRAVITY * 18;
+
+        if (predictY > targetY + 90 &&
+          (frame - ai.lastFlapFrame) > cooldown) {
+          flap(ai);
+        }
+      }
+
+      // ======= Update =======
+      function tick() {
+        if (!running) return;
+
+        frame++;
+
+        // spawn pipes
+        if (frame % PIPE_INTERVAL === 0) spawnPipe();
+
+        // move pipes
+        for (const p of pipes) p.x -= PIPE_SPEED;
+        // remove offscreen
+        while (pipes.length && pipes[0].x + PIPE_W < -20) pipes.shift();
+
+        // AI
+        aiThink();
+
+        // physics
+        for (const b of [player, ai]) {
+          if (!b.alive) continue;
+          b.vy += GRAVITY;
+          b.y += b.vy;
+        }
+
+        // collisions
+        checkCollision(player);
+        checkCollision(ai);
+
+        // scoring
+        updateScore();
+
+        // messages
+        if (player.cleared && player.alive) {
+          message = "🎉 CLEAR!（Playerが10回突破） ※AIが死ぬまでゲームは続きます";
+        } else if (!player.alive && ai.alive) {
+          message = "Player DEAD…（AIは継続中） Rでリスタート可";
+        } else if (player.alive && !ai.alive) {
+          message = "AI DEAD!（Playerは継続中）";
+        } else if (!player.alive && !ai.alive) {
+          message = "Both DEAD. Rでリスタート";
+        }
+
+        // end condition: both dead => stop updating physics, but keep rendering
+        if (!player.alive && !ai.alive) {
+          // Keep rendering but stop spawning/moving? ここでは止める
+          // 「ゲームは続く」条件を満たしたので終了
+          // （描画はループ継続でOK）
+        }
+
+        syncHud();
+        render();
+
+        requestAnimationFrame(tick);
+      }
+
+      // ======= Render =======
+      function drawBird(b) {
+        // body
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fillStyle = b.color;
+        ctx.fill();
+
+        // eye
+        ctx.beginPath();
+        ctx.arc(b.x + 5, b.y - 3, 3, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.fill();
+
+        // beak
+        ctx.beginPath();
+        ctx.moveTo(b.x + b.r - 2, b.y);
+        ctx.lineTo(b.x + b.r + 10, b.y - 4);
+        ctx.lineTo(b.x + b.r + 10, b.y + 4);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(255,190,60,0.95)";
+        ctx.fill();
+      }
+
+      function drawPipes() {
+        for (const p of pipes) {
+          // top
+          ctx.fillStyle = "rgba(60,170,90,0.95)";
+          ctx.fillRect(p.x, 0, PIPE_W, p.gapTop);
+          // bottom
+          ctx.fillRect(p.x, p.gapBot, PIPE_W, GROUND_Y - p.gapBot);
+
+          // rim accents
+          ctx.fillStyle = "rgba(40,140,70,0.95)";
+          ctx.fillRect(p.x - 2, p.gapTop - 10, PIPE_W + 4, 10);
+          ctx.fillRect(p.x - 2, p.gapBot, PIPE_W + 4, 10);
+        }
+      }
+
+      function render() {
+        // clear
+        ctx.clearRect(0, 0, W, H);
+
+        // ground
+        ctx.fillStyle = "rgba(60,120,70,0.18)";
+        ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+        ctx.fillStyle = "rgba(30,90,50,0.18)";
+        ctx.fillRect(0, GROUND_Y, W, 6);
+
+        // lane guide (player/ai)
+        ctx.setLineDash([8, 8]);
+        ctx.strokeStyle = "rgba(0,0,0,0.12)";
+        ctx.beginPath();
+        ctx.moveTo(0, H / 2);
+        ctx.lineTo(W, H / 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        drawPipes();
+
+        // birds
+        if (player.alive) drawBird(player);
+        else {
+          // dead marker
+          ctx.fillStyle = "rgba(0,0,0,0.35)";
+          ctx.fillText("✕", player.x - 4, player.y + 6);
+        }
+
+        if (ai.alive) drawBird(ai);
+        else {
+          ctx.fillStyle = "rgba(0,0,0,0.35)";
+          ctx.fillText("✕", ai.x - 4, ai.y + 6);
+        }
+
+        // labels
+        ctx.font = "bold 16px system-ui, -apple-system, sans-serif";
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillText("PLAYER", player.x - 30, 26);
+        ctx.fillText("AI", ai.x - 10, 26);
+
+        // message overlay
+        if (message) {
+          ctx.font = "bold 18px system-ui, -apple-system, sans-serif";
+          const pad = 12;
+          const textW = ctx.measureText(message).width;
+          const boxW = Math.min(W - 40, textW + pad * 2);
+          const x = (W - boxW) / 2;
+          const y = 60;
+
+          ctx.fillStyle = "rgba(255,255,255,0.85)";
+          ctx.strokeStyle = "rgba(0,0,0,0.12)";
+          ctx.lineWidth = 1;
+          roundRect(ctx, x, y, boxW, 44, 12);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = "rgba(0,0,0,0.75)";
+          ctx.fillText(message, x + pad, y + 28);
+        }
+      }
+
+      function roundRect(ctx, x, y, w, h, r) {
+        const rr = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + rr, y);
+        ctx.arcTo(x + w, y, x + w, y + h, rr);
+        ctx.arcTo(x + w, y + h, x, y + h, rr);
+        ctx.arcTo(x, y + h, x, y, rr);
+        ctx.arcTo(x, y, x + w, y, rr);
+        ctx.closePath();
+      }
+
+      canvas.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        flap(player);
+      });
+
+      // ======= Start =======
+      reset();
+      spawnPipe(); // 初期1本
+      render();
+      requestAnimationFrame(tick);
+    })();
+  </script>
+</body>
+
+</html>
