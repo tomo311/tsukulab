@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sneak Eater</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      background: #111;
+      overflow: hidden;
+    }
+
+    #cv {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: #141414;
+    }
+
+    .hud {
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      color: #fff;
+      font: 14px/1.4 system-ui;
+      background: rgba(0, 0, 0, .35);
+      padding: 10px 12px;
+      border-radius: 10px;
+      max-width: min(520px, calc(100vw - 24px));
+    }
+
+    .hud b {
+      font-weight: 700
+    }
+
+    .hud code {
+      background: rgba(255, 255, 255, .08);
+      padding: 2px 6px;
+      border-radius: 6px
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="cv"></canvas>
+  <div class="hud" id="hud">
+    <div><b>Sneak Eater</b></div>
+    <div id="status">connecting...</div>
+  </div>
+
+  <div id="deadUI" style="
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.5);
+    z-index: 10;
+  ">
+    <button id="restartBtn" style="
+      font-size: 20px;
+      padding: 14px 24px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+    ">
+      もう一度
+    </button>
+  </div>
+
+  <script type="module">
+    // --- Firebase imports (CDN) ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
+    import {
+      getDatabase, ref, set, update, onValue, push,
+      onDisconnect, remove, get, onChildAdded, onChildChanged, onChildRemoved
+    } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-database.js";
+
+    // ====== 0) Config ======
+    const firebaseConfig = {
+      apiKey: "AIzaSyAe9XFeCzyUYw5p_jjc1vean3z6WEpfUpQ",
+      authDomain: "tuk-lab.firebaseapp.com",
+      databaseURL: "https://tuk-lab-default-rtdb.firebaseio.com",
+      projectId: "tuk-lab",
+      storageBucket: "tuk-lab.firebasestorage.app",
+      messagingSenderId: "395307494161",
+      appId: "1:395307494161:web:1fa67dcb48262215bc7ab0",
+    };
+
+    // ====== 1) Game constants ======
+    const WORLD_W = 2400;
+    const WORLD_H = 2400;
+
+    const INIT_LENGTH = 6;
+    const INIT_POS_MARGIN = 200;
+
+    const BASE_SPEED = 100;           // px/sec
+    const BOOST_SPEED = 300;          // px/sec
+    const TURN_SMOOTH = 0.20;         // 0..1 (higher = snappier)
+
+    const HEAD_R = 10;                // head radius
+    const BODY_SPACING = 8;           // distance between stored trail points
+    const LENGTH_TO_POINTS = 0.2;       // how many trail points per length unit
+    const MAX_REMOTE_TRAIL = 900;     // cap
+
+    const NET_HZ = 5;                // send player state 10 times/sec
+    const STALE_MS = 8000;            // ignore players not updated for 8s
+
+    const PELLET_TARGET = 120;
+    const PELLET_VALUE_MIN = 1;
+    const PELLET_VALUE_MAX = 4;
+
+    // ====== 2) Canvas ======
+    const cv = document.getElementById("cv");
+    const ctx = cv.getContext("2d");
+
+    function resize() {
+      cv.width = Math.floor(window.innerWidth * devicePixelRatio);
+      cv.height = Math.floor(window.innerHeight * devicePixelRatio);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(devicePixelRatio, devicePixelRatio);
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    // ====== 3) Utils ======
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const dist2 = (ax, ay, bx, by) => {
+      const dx = ax - bx, dy = ay - by;
+      return dx * dx + dy * dy;
+    };
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const now = () => Date.now();
+
+    function angleTo(ax, ay, bx, by) {
+      const rad = Math.atan2(by - ay, bx - ax);
+      let deg = rad * 180 / Math.PI;
+      if (deg < 0) deg += 360;
+      return deg;
+    }
+    function lerpAngleDeg(a, b, t) {
+      // shortest path
+      let d = ((b - a + 540) % 360) - 180;
+      return (a + d * t + 360) % 360;
+    }
+    function dirFromAngleDeg(deg) {
+      const rad = deg * Math.PI / 180;
+      return { x: Math.cos(rad), y: Math.sin(rad) };
+    }
+
+    // ====== 4) Firebase init & auth ======
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+
+    const roomId = "default";
+    const roomRef = (path = "") => ref(db, `rooms/${roomId}/${path}`);
+
+    const statusEl = document.getElementById("status");
+
+    const sign = await signInAnonymously(auth);
+    const uid = sign.user.uid;
+
+    // ====== 5) Local player state ======
+    const me = {
+      uid,
+      alive: true,
+      angle: 0,
+      length: INIT_LENGTH,
+      x: rand(200, WORLD_W - 200),
+      y: rand(200, WORLD_H - 200),
+      updatedAt: now(),
+      trail: [],        // local trail points for rendering
+      boost: false,
+    };
+
+    // init trail
+    me.trail.push({ x: me.x, y: me.y });
+
+    // write initial
+    const myPlayerRef = roomRef(`players/${uid}`);
+    await set(myPlayerRef, {
+      alive: me.alive,
+      angle: me.angle,
+      length: me.length,
+      x: me.x,
+      y: me.y,
+      updatedAt: me.updatedAt
+    });
+
+    // cleanup on disconnect
+    // onDisconnect(myPlayerRef).remove();
+
+    statusEl.textContent = `uid: ${uid.slice(0, 6)}… / connected`;
+
+    // ====== 6) Remote state ======
+    // players: uid -> {alive, angle, length, x, y, updatedAt, trail[] (client-side)}
+    const players = new Map();
+
+    onValue(roomRef("players"), (snap) => {
+
+      const data = snap.val() || {};
+      const t = now();
+
+      // upsert players
+      for (const [k, p] of Object.entries(data)) {
+        if (!p) continue;
+
+        // stale ignore
+        if (p.updatedAt && (t - p.updatedAt) > STALE_MS) continue;
+
+        if (k === uid) continue;
+
+        const existing = players.get(k) || {
+          uid: k,
+          trail: []
+        };
+
+        existing.alive = !!p.alive;
+        existing.angle = (p.angle ?? 0) % 360;
+        existing.length = Math.max(1, Number(p.length ?? 1));
+        existing.x = Number(p.x ?? 0);
+        existing.y = Number(p.y ?? 0);
+        existing.updatedAt = Number(p.updatedAt ?? 0);
+
+        // build remote trail from received head positions
+        if (existing.alive) {
+          const last = existing.trail[existing.trail.length - 1];
+          if (!last || dist2(last.x, last.y, existing.x, existing.y) >= BODY_SPACING * BODY_SPACING) {
+            existing.trail.push({ x: existing.x, y: existing.y });
+            if (existing.trail.length > MAX_REMOTE_TRAIL) existing.trail.shift();
+          }
+        }
+
+        players.set(k, existing);
+      }
+
+      // remove missing players from map
+      for (const k of Array.from(players.keys())) {
+        if (!data[k]) players.delete(k);
+      }
+    });
+
+    // ====== 7) Pellets ======
+    const pellets = new Map(); // id -> {x,y,value,createdAt}
+
+    onValue(roomRef("pellets"), (snap) => {      
+      const data = snap.val() || {};
+      pellets.clear();
+      for (const [id, v] of Object.entries(data)) {
+        if (!v) continue;
+        pellets.set(id, {
+          x: Number(v.x ?? 0),
+          y: Number(v.y ?? 0),
+          value: Math.max(1, Number(v.value ?? 1)),
+          createdAt: Number(v.createdAt ?? 0)
+        });
+      }
+    });
+
+    async function ensurePellets() {
+      // lightweight: if few pellets, any client spawns some
+      const cur = pellets.size;
+      if (cur >= PELLET_TARGET) return;
+
+      const toAdd = Math.min(PELLET_TARGET - cur, 20);
+      for (let i = 0; i < toAdd; i++) {
+        const idRef = push(roomRef("pellets"));
+        await set(idRef, {
+          x: rand(40, WORLD_W - 40),
+          y: rand(40, WORLD_H - 40),
+          value: Math.floor(rand(PELLET_VALUE_MIN, PELLET_VALUE_MAX + 1)),
+          createdAt: now()
+        });
+      }
+    }
+
+    // ====== 8) Kills & deaths events ======
+    // kill request path: rooms/default/kills/{victimUid} = {by, at}
+    // victim watches kills, if target == me and alive -> die & emit death record
+
+    onValue(roomRef(`kills/${uid}`), async (snap) => {
+      const v = snap.val();
+      if (!v) return;
+      if (!me.alive) { await remove(roomRef(`kills/${uid}`)); return; }
+      // accept kill
+      me.alive = false;
+      me.updatedAt = now();
+      await update(myPlayerRef, { alive: false, updatedAt: me.updatedAt });
+
+      deadUI.style.display = "flex";
+
+      // emit death
+      const deathRef = push(roomRef("deaths"));
+      await set(deathRef, {
+        victimUid: uid,
+        by: v.by || "",
+        length: me.length,
+        at: now()
+      });
+
+      // clear kill request
+      await remove(roomRef(`kills/${uid}`));
+    });
+
+    // killer watches deaths to gain length
+      onChildAdded(roomRef("deaths"), async (snap) => {
+      const d = snap.val();
+      if (!d) return;
+      if (d.by !== uid) return;
+
+      // gain victim length (as requested)
+      if (me.alive) {
+        me.length += Math.max(1, Number(d.length ?? 1));
+      }
+      // no delete here (could be allowed, but keeping simple)
+    });
+
+
+
+    // ====== 9) Input ======
+    let mouseX = 0, mouseY = 0;
+    let aiming = false;
+
+    function screenToWorld(sx, sy) {
+      // camera centered on me
+      const camX = me.x - window.innerWidth / 2;
+      const camY = me.y - window.innerHeight / 2;
+      return { x: sx + camX, y: sy + camY };
+    }
+
+    window.addEventListener("mousemove", (e) => {
+      mouseX = e.clientX; mouseY = e.clientY;
+      aiming = true;
+    });
+    window.addEventListener("mousedown", () => { me.boost = true; });
+    window.addEventListener("mouseup", () => { me.boost = false; });
+
+    window.addEventListener("touchstart", (e) => {
+      const t = e.touches[0];
+      if (!t) return;
+      mouseX = t.clientX; mouseY = t.clientY;
+      aiming = true;
+      me.boost = true;
+    }, { passive: true });
+
+    window.addEventListener("touchmove", (e) => {
+      const t = e.touches[0];
+      if (!t) return;
+      mouseX = t.clientX; mouseY = t.clientY;
+      aiming = true;
+    }, { passive: true });
+
+    window.addEventListener("touchend", () => { me.boost = false; }, { passive: true });
+
+    // ====== 10) Networking tick (send my state) ======
+    let netAcc = 0;
+
+    async function sendMyState() {
+      if (!me.alive) {
+        // keep sending alive=false sometimes is OK; we keep minimal
+        await update(myPlayerRef, { alive: false, updatedAt: now() });
+        return;
+      }
+      await update(myPlayerRef, {
+        alive: true,
+        angle: me.angle,
+        length: me.length,
+        x: me.x,
+        y: me.y,
+        updatedAt: now(),
+      });
+    }
+
+    // ====== 11) Game loop ======
+    let lastT = performance.now();
+
+    function addTrailPointIfNeeded(p) {
+      const last = me.trail[me.trail.length - 1];
+      if (!last || dist2(last.x, last.y, p.x, p.y) >= BODY_SPACING * BODY_SPACING) {
+        me.trail.push({ x: p.x, y: p.y });
+      }
+      // keep length-based trail size
+      const targetPoints = Math.max(30, Math.floor(me.length * LENGTH_TO_POINTS));
+      while (me.trail.length > targetPoints) me.trail.shift();
+    }
+
+    function checkPelletEat() {
+      if (!me.alive) return;
+      const r = HEAD_R + 4;
+      const r2 = r * r;
+
+      for (const [id, p] of pellets) {
+        if (dist2(me.x, me.y, p.x, p.y) <= r2) {
+          me.length += p.value;
+          // remove pellet
+          remove(roomRef(`pellets/${id}`));
+          // spawn more occasionally
+          ensurePellets();
+          break;
+        }
+      }
+    }
+
+    function requestKill(victimUid) {
+      // attacker writes kill request
+      set(roomRef(`kills/${victimUid}`), { by: uid, at: now() });
+    }
+
+    function checkSnakeCollisions() {
+      if (!me.alive) return;
+
+      const headR = HEAD_R;
+      const hitR2 = (headR * headR);
+
+      for (const [otherUid, p] of players) {
+        if (!p.alive) continue;
+
+        // compute approximate body from p.trail (excluding the newest point (head-ish))
+        const trail = p.trail;
+        if (!trail || trail.length < 8) continue;
+
+        // skip near-head points to reduce instant-kill at spawn
+        const start = Math.max(0, trail.length - Math.floor(p.length * LENGTH_TO_POINTS));
+        const end = Math.max(start, trail.length - 4); // exclude last few
+        for (let i = start; i < end; i++) {
+          const pt = trail[i];
+          if (dist2(me.x, me.y, pt.x, pt.y) <= hitR2) {
+            // kill other
+            requestKill(uid);
+
+            return;
+          }
+        }
+      }
+    }
+
+    function restartMe() {
+      me.alive = true;
+      me.length = INIT_LENGTH;
+      me.angle = rand(0, 360);
+      me.x = rand(INIT_POS_MARGIN, WORLD_W - INIT_POS_MARGIN);
+      me.y = rand(INIT_POS_MARGIN, WORLD_H - INIT_POS_MARGIN);
+      me.updatedAt = now();
+
+      // trail を完全リセット
+      me.trail.length = 0;
+      me.trail.push({ x: me.x, y: me.y });
+
+      // Firebase に反映（awaitしない）
+      update(myPlayerRef, {
+        alive: true,
+        length: me.length,
+        angle: me.angle,
+        x: me.x,
+        y: me.y,
+        updatedAt: me.updatedAt
+      });
+    }
+
+    const deadUI = document.getElementById("deadUI");
+    const restartBtn = document.getElementById("restartBtn");
+
+    restartBtn.addEventListener("click", () => {
+      deadUI.style.display = "none";
+      restartMe();
+    });
+
+
+    function keepInWorld() {
+      me.x = clamp(me.x, 0, WORLD_W);
+      me.y = clamp(me.y, 0, WORLD_H);
+    }
+
+    function draw() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+
+      // camera
+      const camX = me.x - w / 2;
+      const camY = me.y - h / 2;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // background grid
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255,255,255,0.06)";
+      const grid = 120;
+      const gx0 = Math.floor(camX / grid) * grid;
+      const gy0 = Math.floor(camY / grid) * grid;
+      for (let x = gx0; x < camX + w + grid; x += grid) {
+        ctx.beginPath();
+        ctx.moveTo(x - camX, -camY);
+        ctx.lineTo(x - camX, h - camY);
+        ctx.stroke();
+      }
+      for (let y = gy0; y < camY + h + grid; y += grid) {
+        ctx.beginPath();
+        ctx.moveTo(-camX, y - camY);
+        ctx.lineTo(w - camX, y - camY);
+        ctx.stroke();
+      }
+
+      // pellets
+      for (const p of pellets.values()) {
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(0, 220, 180, 0.9)";
+        ctx.arc(p.x - camX, p.y - camY, 4 + p.value * 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // draw other snakes
+      for (const p of players.values()) {
+        drawSnake(p, camX, camY, false);
+      }
+
+      // draw me last
+      drawSnake(me, camX, camY, true);
+
+      // HUD
+      statusEl.textContent =
+        `場所: (${me.x.toFixed(0)}, ${me.y.toFixed(0)}) 長さ：(${me.length})`
+    }
+
+    function drawSnake(p, camX, camY, isMe) {
+      const trail = p.trail || [];
+      const alive = !!p.alive;
+
+      // body
+      if (trail.length >= 2) {
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = 12;
+        ctx.strokeStyle = isMe ? "rgba(255,220,0,0.85)" : "rgba(160,160,255,0.65)";
+        if (!alive) ctx.strokeStyle = "rgba(140,140,140,0.35)";
+
+        ctx.beginPath();
+        const start = Math.max(0, trail.length - Math.floor((p.length || 10) * LENGTH_TO_POINTS));
+        const first = trail[start];
+        ctx.moveTo(first.x - camX, first.y - camY);
+        for (let i = start + 1; i < trail.length; i++) {
+          const pt = trail[i];
+          ctx.lineTo(pt.x - camX, pt.y - camY);
+        }
+        ctx.stroke();
+      }
+
+      // head
+      ctx.beginPath();
+      ctx.fillStyle = isMe ? "rgba(255,220,0,1)" : "rgba(180,180,255,0.95)";
+      if (!alive) ctx.fillStyle = "rgba(160,160,160,0.6)";
+      ctx.arc(p.x - camX, p.y - camY, HEAD_R, 0, Math.PI * 2);
+      ctx.fill();
+
+      // direction indicator
+      const d = dirFromAngleDeg(p.angle || 0);
+      ctx.strokeStyle = "rgba(0,0,0,0.35)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(p.x - camX, p.y - camY);
+      ctx.lineTo(p.x - camX + d.x * 18, p.y - camY + d.y * 18);
+      ctx.stroke();
+    }
+
+    // ====== 12) Main loop ======
+    function tick(t) {
+      const dt = Math.min(0.05, (t - lastT) / 1000);
+      lastT = t;
+
+      // aim angle
+      if (me.alive && aiming) {
+        const wpos = screenToWorld(mouseX, mouseY);
+        const target = angleTo(me.x, me.y, wpos.x, wpos.y);
+        me.angle = lerpAngleDeg(me.angle, target, TURN_SMOOTH);
+      }
+
+      // move
+      if (me.alive) {
+        const sp = me.boost ? BOOST_SPEED : BASE_SPEED;
+        const d = dirFromAngleDeg(me.angle);
+        me.x += d.x * sp * dt;
+        me.y += d.y * sp * dt;
+        keepInWorld();
+
+        addTrailPointIfNeeded({ x: me.x, y: me.y });
+      }
+
+      // collisions (async but we keep them throttled a bit)
+      // NOTE: In real games, do these at fixed steps and avoid too many awaits
+      if (me.alive) {
+        checkPelletEat();
+        checkSnakeCollisions();
+      }
+
+      // spawn pellets occasionally
+      if (Math.random() < 0.02) ensurePellets();
+
+      // network send at 10Hz
+      netAcc += dt;
+      if (netAcc >= (1 / NET_HZ)) {
+        netAcc = 0;
+        sendMyState();
+      }
+
+      draw();
+      requestAnimationFrame(tick);
+    }
+
+    // start
+    ensurePellets();
+    requestAnimationFrame(tick);
+  </script>
+</body>
+
+</html>
