@@ -1,90 +1,442 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
+
 <head>
   <meta charset="utf-8" />
-  <title>交通量モック</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bird Fly Game</title>
   <style>
-    html, body {
+    :root {
+      --w: 360px;
+      --h: 540px;
+    }
+
+    body {
       margin: 0;
-      height: 100%;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      background: #f6f7fb;
     }
-    #map {
+
+    .wrap {
+      width: min(92vw, var(--w));
+    }
+
+    .hud {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 10px 2px;
+      color: #333;
+      font-size: 14px;
+    }
+
+    .hint {
+      opacity: .75;
+      font-size: 12px;
+    }
+
+    canvas {
       width: 100%;
-      height: 100%;
+      height: auto;
+      border-radius: 16px;
+      background: linear-gradient(#dff3ff, #fdf7ff);
+      box-shadow: 0 10px 26px rgba(0, 0, 0, .12);
+      display: block;
+      touch-action: manipulation;
+      user-select: none;
     }
-    .panel {
-      position: absolute;
-      top: 10px;
-      left: 10px;
+
+    .overlay {
+      position: relative;
+      margin-top: 10px;
+      text-align: center;
+      color: #333;
+      font-size: 12px;
+      opacity: .8;
+    }
+
+    .btn {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(0, 0, 0, .1);
       background: white;
-      padding: 10px;
-      border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,.3);
-      font-family: sans-serif;
-      z-index: 10;
+      cursor: pointer;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, .08);
+    }
+
+    .btn:active {
+      transform: translateY(1px);
     }
   </style>
 </head>
+
 <body>
+  <div class="wrap">
+    <div class="hud">
+      <div>Score: <b id="score">0</b></div>
+      <div class="hint">Click / Space = flap</div>
+    </div>
 
-<div class="panel">
-  <button onclick="calcRoute()">ルート表示</button>
-  <div id="info"></div>
-</div>
+    <canvas id="cv" width="360" height="540"></canvas>
 
-<div id="map"></div>
+    <div class="overlay">
+      <div id="msg">クリック or スペースで開始</div>
+      <button class="btn" id="restartBtn" style="display:none;">Restart</button>
+    </div>
+  </div>
 
-<script>
-let map;
-let directionsService;
-let directionsRenderer;
+  <script>
+    (() => {
+      const cv = document.getElementById("cv");
+      const ctx = cv.getContext("2d");
+      const W = cv.width, H = cv.height;
 
-function initMap() {
-  map = new google.maps.Map(document.getElementById("map"), {
-    center: { lat: 35.681236, lng: 139.767125 }, // 東京駅
-    zoom: 13,
-  });
+      const scoreEl = document.getElementById("score");
+      const msgEl = document.getElementById("msg");
+      const restartBtn = document.getElementById("restartBtn");
 
-  // 交通量レイヤー
-  const trafficLayer = new google.maps.TrafficLayer();
-  trafficLayer.setMap(map);
+      // ---- Audio: flap sound (no external file) ----
+      // WebAudio + short "chirp" beep
+      let audioCtx = null;
+      function ensureAudio() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+      }
+      function playFlap() {
+        if (!audioCtx) return; // start after first user action
+        const t0 = audioCtx.currentTime;
 
-  directionsService = new google.maps.DirectionsService();
-  directionsRenderer = new google.maps.DirectionsRenderer({
-    map: map
-  });
-}
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
 
-function calcRoute() {
-  const request = {
-    origin: "東京駅",
-    destination: "新宿駅",
-    travelMode: "DRIVING",
-    drivingOptions: {
-      departureTime: new Date(), // 今出発
-      trafficModel: "bestguess"
-    }
-  };
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(620, t0);
+        osc.frequency.exponentialRampToValueAtTime(980, t0 + 0.06);
 
-  directionsService.route(request, (result, status) => {
-    if (status === "OK") {
-      directionsRenderer.setDirections(result);
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.18, t0 + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.10);
 
-      const leg = result.routes[0].legs[0];
-      document.getElementById("info").innerHTML = `
-        距離: ${leg.distance.text}<br>
-        通常: ${leg.duration.text}<br>
-        渋滞考慮: ${leg.duration_in_traffic.text}
-      `;
-    }
-  });
-}
-</script>
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
 
-<!-- ↓↓↓ APIキーを差し替え ↓↓↓ -->
-<script async
-  src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap">
-</script>
+        osc.start(t0);
+        osc.stop(t0 + 0.12);
+      }
 
+      // ---- Game state ----
+      let running = false;
+      let gameOver = false;
+      let score = 0;
+
+      const bird = {
+        x: 90,
+        y: H * 0.45,
+        r: 14,
+        vy: 0,
+      };
+
+      // Physics
+      const GRAV = 0.48;     // gravity
+      const FLAP = -8.0;     // flap impulse
+      const MAX_FALL = 12;   // clamp
+
+      // Pipes
+      const pipes = [];
+      const PIPE_W = 64;
+      const GAP = 150;
+      const SPEED = 2.6;
+      let spawnTimer = 0;
+      const SPAWN_EVERY = 95; // frames
+
+      function reset() {
+        running = false;
+        gameOver = false;
+        score = 0;
+        scoreEl.textContent = score;
+
+        bird.y = H * 0.45;
+        bird.vy = 0;
+
+        pipes.length = 0;
+        spawnTimer = 0;
+
+        msgEl.textContent = "クリック or スペースで開始";
+        restartBtn.style.display = "none";
+      }
+
+      function start() {
+        if (gameOver) return;
+        running = true;
+        msgEl.textContent = " ";
+      }
+
+      function end() {
+        gameOver = true;
+        running = false;
+        playCrash(); // ← ★ここで「ぐしゃ」
+        msgEl.textContent = "Game Over";
+        restartBtn.style.display = "inline-block";
+      }
+
+      function flap() {
+        ensureAudio();
+        if (gameOver) return;
+        if (!running) start();
+        bird.vy = FLAP;
+        playFlap();
+      }
+
+      function spawnPipe() {
+        // gap center range
+        const margin = 60;
+        const gapCenter = margin + Math.random() * (H - margin * 2);
+        const topH = Math.max(20, gapCenter - GAP / 2);
+        const botY = gapCenter + GAP / 2;
+        pipes.push({
+          x: W + 10,
+          gapTop: topH,
+          gapBot: botY,
+          passed: false,
+        });
+      }
+
+      function circleRectCollide(cx, cy, r, rx, ry, rw, rh) {
+        // clamp point to rect
+        const px = Math.max(rx, Math.min(cx, rx + rw));
+        const py = Math.max(ry, Math.min(cy, ry + rh));
+        const dx = cx - px, dy = cy - py;
+        return dx * dx + dy * dy <= r * r;
+      }
+
+      let spacePressed = false;
+      // ---- Input ----
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Space") {
+          e.preventDefault();
+          flap();
+        }
+        if (e.code === "Enter" && gameOver) {
+          reset();
+        }
+      }, { passive: false });
+
+      cv.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        flap();
+      });
+
+      function playCrash() {
+        if (!audioCtx) return;
+
+        const t0 = audioCtx.currentTime;
+
+        // ノイズ用バッファ
+        const bufferSize = audioCtx.sampleRate * 0.25;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+        }
+
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(700, t0);
+
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.8, t0);
+        gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.25);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        noise.start(t0);
+        noise.stop(t0 + 0.25);
+      }
+
+
+      restartBtn.addEventListener("click", reset);
+
+      // ---- Render helpers ----
+      function drawBird() {
+        // body
+        ctx.save();
+        ctx.translate(bird.x, bird.y);
+
+        // rotate slightly by velocity (cute effect)
+        const rot = Math.max(-0.6, Math.min(0.8, bird.vy / 12));
+        ctx.rotate(rot);
+
+        // shadow
+        ctx.globalAlpha = 0.15;
+        ctx.beginPath();
+        ctx.ellipse(0, bird.r + 10, bird.r * 1.2, 6, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "#000";
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        // body circle
+        ctx.beginPath();
+        ctx.arc(0, 0, bird.r, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffcf5a";
+        ctx.fill();
+
+        // wing
+        ctx.beginPath();
+        ctx.ellipse(-4, 2, 9, 6, -0.4, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffd98c";
+        ctx.fill();
+
+        // eye
+        ctx.beginPath();
+        ctx.arc(5, -4, 3, 0, Math.PI * 2);
+        ctx.fillStyle = "#222";
+        ctx.fill();
+
+        // beak
+        ctx.beginPath();
+        ctx.moveTo(10, 0);
+        ctx.lineTo(18, 3);
+        ctx.lineTo(10, 6);
+        ctx.closePath();
+        ctx.fillStyle = "#ff8a5a";
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      function drawPipe(p) {
+        // top rect: from 0 to gapTop
+        const x = p.x;
+        // pipe color
+        ctx.fillStyle = "#57c07a";
+
+        // top
+        ctx.fillRect(x, 0, PIPE_W, p.gapTop);
+        // bottom
+        ctx.fillRect(x, p.gapBot, PIPE_W, H - p.gapBot);
+
+        // little caps
+        ctx.fillStyle = "#3ca864";
+        ctx.fillRect(x - 4, p.gapTop - 14, PIPE_W + 8, 14);
+        ctx.fillRect(x - 4, p.gapBot, PIPE_W + 8, 14);
+      }
+
+      function drawGroundLine() {
+        ctx.strokeStyle = "rgba(0,0,0,.08)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, H - 1);
+        ctx.lineTo(W, H - 1);
+        ctx.stroke();
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+
+        // pipes
+        for (const p of pipes) drawPipe(p);
+
+        drawBird();
+        drawGroundLine();
+
+        // start / over overlay inside canvas
+        if (!running && !gameOver) {
+          ctx.fillStyle = "rgba(0,0,0,.55)";
+          ctx.font = "16px system-ui";
+          ctx.textAlign = "center";
+          ctx.fillText("Click / Space to flap", W / 2, H / 2 - 10);
+          ctx.font = "12px system-ui";
+          ctx.fillText("落ちる / 壁に当たると終了", W / 2, H / 2 + 14);
+        }
+        if (gameOver) {
+          ctx.fillStyle = "rgba(0,0,0,.65)";
+          ctx.font = "22px system-ui";
+          ctx.textAlign = "center";
+          ctx.fillText("GAME OVER", W / 2, H / 2);
+          ctx.font = "12px system-ui";
+          ctx.fillText("Restart ボタン or Enter", W / 2, H / 2 + 24);
+        }
+      }
+
+      // ---- Update loop ----
+      function step() {
+        // update physics
+        if (running && !gameOver) {
+          bird.vy += GRAV;
+          if (bird.vy > MAX_FALL) bird.vy = MAX_FALL;
+          bird.y += bird.vy;
+
+          // --- 追加：上に出られないようにする ---
+          if (bird.y - bird.r <= 0) {
+            bird.y = bird.r; // 天井に張り付く
+            bird.vy = 0;     // 上方向の勢いを止める
+          }
+
+
+          // bottom = game over
+          if (bird.y + bird.r >= H) {
+            bird.y = H - bird.r;
+            end();
+          }
+
+          // spawn pipes
+          spawnTimer++;
+          if (spawnTimer >= SPAWN_EVERY) {
+            spawnTimer = 0;
+            spawnPipe();
+          }
+
+          // move pipes & collisions
+          for (const p of pipes) {
+            p.x -= SPEED;
+
+            // score when passed
+            if (!p.passed && p.x + PIPE_W < bird.x - bird.r) {
+              p.passed = true;
+              score++;
+              scoreEl.textContent = score;
+            }
+
+            // collision top rect
+            const hitTop = circleRectCollide(
+              bird.x, bird.y, bird.r,
+              p.x, 0, PIPE_W, p.gapTop
+            );
+            // collision bottom rect
+            const hitBot = circleRectCollide(
+              bird.x, bird.y, bird.r,
+              p.x, p.gapBot, PIPE_W, H - p.gapBot
+            );
+
+            if (hitTop || hitBot) {
+              end();
+              break;
+            }
+          }
+
+          // remove offscreen pipes
+          while (pipes.length && pipes[0].x + PIPE_W < -20) pipes.shift();
+        }
+
+        draw();
+        requestAnimationFrame(step);
+      }
+
+      reset();
+      requestAnimationFrame(step);
+    })();
+  </script>
 </body>
+
 </html>
