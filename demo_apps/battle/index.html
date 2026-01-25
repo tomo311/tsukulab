@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Firebase Realtime DB - Simple 2D Fighting</title>
+  <style>
+    :root { --bg:#0b1020; --card:#121a33; --text:#eaf0ff; --muted:#9bb0ff; }
+    body{
+      margin:0; font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      background: radial-gradient(1200px 800px at 30% 20%, #1b2a6b 0%, var(--bg) 55%, #050814 100%);
+      color:var(--text);
+      display:flex; min-height:100vh; align-items:center; justify-content:center;
+      padding:16px;
+    }
+    .wrap{ width:min(980px, 100%); display:grid; grid-template-columns: 1fr; gap:12px; }
+    .top{
+      background: rgba(18,26,51,.85);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:14px;
+      padding:12px 14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.25);
+      display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
+    }
+    .top .left{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .badge{
+      padding:6px 10px; border-radius:999px;
+      background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.08);
+      color: var(--muted); font-size:12px;
+    }
+    .btn{
+      appearance:none; border:0; cursor:pointer;
+      padding:10px 12px; border-radius:12px;
+      background: linear-gradient(180deg, #5b7cff, #3a56ff);
+      color:white; font-weight:700;
+      box-shadow: 0 8px 20px rgba(58,86,255,.28);
+    }
+    .btn.secondary{
+      background: rgba(255,255,255,.10);
+      box-shadow:none; font-weight:600;
+      border:1px solid rgba(255,255,255,.10);
+    }
+    .btn:disabled{ opacity:.6; cursor:not-allowed; }
+
+    .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    input{
+      width: 180px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 12px;
+      padding: 10px 12px;
+      color: var(--text);
+      outline: none;
+    }
+    input::placeholder{ color: rgba(234,240,255,.55); }
+
+    .gamecard{
+      background: rgba(18,26,51,.75);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:14px;
+      overflow:hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,.25);
+    }
+    canvas{
+      width:100%;
+      height:auto;
+      display:block;
+      background: linear-gradient(180deg, #0e1636 0%, #0a1027 60%, #060a18 100%);
+    }
+    .hud{
+      display:flex; gap:12px; padding:10px 12px; align-items:center; justify-content:space-between;
+      border-top:1px solid rgba(255,255,255,.06);
+      font-size: 13px;
+    }
+    .hpbar{ width: 240px; max-width: 42vw; height: 10px; border-radius:999px;
+      background: rgba(255,255,255,.10); overflow:hidden; border:1px solid rgba(255,255,255,.10);
+    }
+    .hpfill{ height:100%; width:100%; background: linear-gradient(90deg,#46ffb3,#41b9ff); }
+    .hpfill.enemy{ background: linear-gradient(90deg,#ff4d6d,#ffa94d); }
+
+    .help{
+      color: rgba(234,240,255,.75);
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 0 2px;
+    }
+
+    /* Mobile touch controls */
+    .touch{
+      display:none;
+      gap:10px;
+      justify-content:space-between;
+      padding: 10px 12px 12px;
+      border-top:1px solid rgba(255,255,255,.06);
+    }
+    .touch .pad{ display:flex; gap:8px; }
+    .tbtn{
+      user-select:none;
+      padding: 14px 14px;
+      border-radius:14px;
+      background: rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.12);
+      color: var(--text);
+      font-weight:800;
+      min-width: 56px;
+      text-align:center;
+    }
+    .tbtn:active{ transform: translateY(1px); }
+
+    @media (max-width: 760px){
+      .touch{ display:flex; }
+      input{ width: 150px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="left">
+        <div class="badge" id="statusBadge">Status: booting...</div>
+        <div class="badge" id="roomBadge">Room: -</div>
+        <div class="badge" id="meBadge">Me: -</div>
+      </div>
+
+      <div class="row">
+        <input id="roomInput" placeholder="roomId (任意)" />
+        <button class="btn" id="createBtn">Create / Start</button>
+        <button class="btn secondary" id="joinBtn">Join</button>
+        <button class="btn secondary" id="copyBtn">Copy Invite</button>
+      </div>
+    </div>
+
+    <div class="gamecard">
+      <canvas id="cv" width="900" height="520"></canvas>
+      <div class="hud">
+        <div style="display:flex;gap:10px;align-items:center;">
+          <div>YOU</div>
+          <div class="hpbar"><div class="hpfill" id="hpMe"></div></div>
+          <div id="hpMeText">100</div>
+        </div>
+        <div id="msg">WASD/矢印:移動　J:パンチ　K:ガード　R:リスタート</div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <div id="hpEnText">100</div>
+          <div class="hpbar"><div class="hpfill enemy" id="hpEn"></div></div>
+          <div>ENEMY</div>
+        </div>
+      </div>
+
+      <div class="touch">
+        <div class="pad">
+          <div class="tbtn" data-key="ArrowLeft">←</div>
+          <div class="tbtn" data-key="ArrowRight">→</div>
+        </div>
+        <div class="pad">
+          <div class="tbtn" data-key="KeyJ">PUNCH</div>
+          <div class="tbtn" data-key="KeyK">GUARD</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="help">
+      ・このページを2つの端末/タブで開いて、同じ roomId に入ると対戦できます。<br>
+      ・招待URLは「Copy Invite」でコピーできます（URLの #room=... を共有）<br>
+      ・注意：本格格闘向けのフレーム精度は出ません。簡易対戦向けです。
+    </div>
+  </div>
+
+  <script type="module">
+    /******************************************************************
+     * 1) Firebase 設定：ここだけ自分のプロジェクトの値に差し替え
+     ******************************************************************/
+    const firebaseConfig = {
+      apiKey: "AIzaSyCK7l_nwsm2ffrCx7PtPMhPUvdKslSz4lw",
+      authDomain: "sample-50c15.firebaseapp.com",
+      databaseURL: "https://sample-50c15.firebaseio.com",
+      projectId: "sample-50c15",
+      storageBucket: "sample-50c15.firebasestorage.app",
+      messagingSenderId: "1067688355410",
+      appId: "1:1067688355410:web:b4669b55bff4ae78daa18b"
+    };
+
+    /******************************************************************
+     * 2) Firebase SDK (CDN, v10)
+     ******************************************************************/
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import {
+      getDatabase, ref, set, get, update, onValue, onDisconnect, serverTimestamp,
+      runTransaction, child
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+    import {
+      getAuth, signInAnonymously, onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
+
+    /******************************************************************
+     * 3) 画面要素
+     ******************************************************************/
+    const cv = document.getElementById("cv");
+    const ctx = cv.getContext("2d");
+
+    const statusBadge = document.getElementById("statusBadge");
+    const roomBadge = document.getElementById("roomBadge");
+    const meBadge = document.getElementById("meBadge");
+    const msg = document.getElementById("msg");
+
+    const roomInput = document.getElementById("roomInput");
+    const createBtn = document.getElementById("createBtn");
+    const joinBtn = document.getElementById("joinBtn");
+    const copyBtn = document.getElementById("copyBtn");
+
+    const hpMeFill = document.getElementById("hpMe");
+    const hpEnFill = document.getElementById("hpEn");
+    const hpMeText = document.getElementById("hpMeText");
+    const hpEnText = document.getElementById("hpEnText");
+
+    /******************************************************************
+     * 4) 簡易SE（WebAudio）
+     ******************************************************************/
+    const audio = new (window.AudioContext || window.webkitAudioContext)();
+    function beep(freq=440, dur=0.06, type="square", gain=0.08){
+      const o = audio.createOscillator();
+      const g = audio.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.value = gain;
+      o.connect(g).connect(audio.destination);
+      o.start();
+      o.stop(audio.currentTime + dur);
+    }
+    function thud(){
+      // hitっぽい低音
+      beep(140, 0.05, "square", 0.10);
+      beep(90, 0.06, "sine", 0.10);
+    }
+
+    // ユーザー操作開始時に audio resume（Safari対策）
+    function ensureAudio(){
+      if (audio.state !== "running") audio.resume().catch(()=>{});
+    }
+    window.addEventListener("pointerdown", ensureAudio, { once:true });
+
+    /******************************************************************
+     * 5) ゲーム定数
+     ******************************************************************/
+    const W = cv.width, H = cv.height;
+    const GROUND_Y = H * 0.80;
+
+    const SPEED = 4.0;
+    const PUNCH_TIME = 180; // ms
+    const HIT_COOLDOWN = 350; // ms
+    const PUNCH_RANGE = 72;
+    const DAMAGE = 10;
+
+    /******************************************************************
+     * 6) ローカル状態
+     ******************************************************************/
+    let uid = null;
+    let roomId = null;
+    let mySlot = null;      // "p1" or "p2"
+    let enemySlot = null;
+
+    const keys = new Set();
+
+    const local = {
+      x: 220,
+      y: GROUND_Y,
+      w: 46,
+      h: 72,
+      hp: 100,
+      face: 1,             // 1:right, -1:left
+      action: "idle",      // idle | punch | guard | hit | ko
+      punchUntil: 0,
+      lastHitAt: 0
+    };
+
+    const remote = {
+      x: 680,
+      y: GROUND_Y,
+      w: 46,
+      h: 72,
+      hp: 100,
+      face: -1,
+      action: "idle",
+      online: false
+    };
+
+    let playing = false;
+    let lastSendAt = 0;
+    let lastFrame = performance.now();
+
+    /******************************************************************
+     * 7) Firebase パス
+     ******************************************************************/
+    function roomRef() { return ref(db, `rooms/${roomId}`); }
+    function playerRef(slot) { return ref(db, `rooms/${roomId}/players/${slot}`); }
+    function statusRef() { return ref(db, `rooms/${roomId}/status`); }
+    function metaRef() { return ref(db, `rooms/${roomId}/meta`); }
+
+    /******************************************************************
+     * 8) UI helper
+     ******************************************************************/
+    function setStatus(text){ statusBadge.textContent = "Status: " + text; }
+    function setRoom(text){ roomBadge.textContent = "Room: " + text; }
+    function setMe(text){ meBadge.textContent = "Me: " + text; }
+
+    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+    function randomRoomId(){
+      return Math.random().toString(36).slice(2, 8);
+    }
+
+    function parseRoomFromHash(){
+      const m = location.hash.match(/room=([a-zA-Z0-9_-]+)/);
+      return m ? m[1] : null;
+    }
+
+    function setHashRoom(r){
+      history.replaceState(null, "", "#room=" + encodeURIComponent(r));
+    }
+
+    /******************************************************************
+     * 9) DB 初期化 / 参加
+     ******************************************************************/
+    async function createOrStartRoom(rid){
+      roomId = rid || randomRoomId();
+      setHashRoom(roomId);
+      setRoom(roomId);
+
+      const snap = await get(roomRef());
+      if (!snap.exists()){
+        await set(roomRef(), {
+          status: "waiting",
+          createdAt: serverTimestamp(),
+          meta: { version: 1 },
+          players: {}
+        });
+      }
+      await joinRoom(roomId);
+    }
+
+    async function joinRoom(rid){
+      roomId = rid;
+      setHashRoom(roomId);
+      setRoom(roomId);
+      setStatus("joining...");
+
+      // decide slot
+      const r = roomRef();
+      const snap = await get(r);
+      if (!snap.exists()){
+        setStatus("room not found");
+        msg.textContent = "Room not found. Create first.";
+        return;
+      }
+      const data = snap.val();
+      const players = data.players || {};
+
+      if (!players.p1) mySlot = "p1";
+      else if (!players.p2) mySlot = "p2";
+      else {
+        setStatus("room full");
+        msg.textContent = "Room is full.";
+        return;
+      }
+
+      enemySlot = (mySlot === "p1") ? "p2" : "p1";
+      setMe(`${mySlot} (${uid.slice(0,6)})`);
+
+      // initial positions by slot
+      if (mySlot === "p1"){
+        local.x = 220; local.face = 1;
+      } else {
+        local.x = 680; local.face = -1;
+      }
+      local.y = GROUND_Y;
+      local.hp = 100;
+      local.action = "idle";
+
+      // write my player state
+      await set(playerRef(mySlot), {
+        uid,
+        x: local.x,
+        y: local.y,
+        hp: local.hp,
+        face: local.face,
+        action: local.action,
+        updatedAt: serverTimestamp(),
+        online: true
+      });
+
+      // presence cleanup
+      onDisconnect(playerRef(mySlot)).update({ online:false, updatedAt: serverTimestamp() }).catch(()=>{});
+      onDisconnect(statusRef()).set("finished").catch(()=>{});
+
+      // if second player joined, start
+      const playersNow = (await get(child(r, "players"))).val() || {};
+      const hasP1 = !!playersNow.p1;
+      const hasP2 = !!playersNow.p2;
+      if (hasP1 && hasP2){
+        await set(statusRef(), "playing");
+      } else {
+        await set(statusRef(), "waiting");
+      }
+
+      hookRoomListeners();
+      playing = true;
+      setStatus("connected");
+      msg.textContent = "Waiting for opponent...";
+    }
+
+    function hookRoomListeners(){
+      // room status
+      onValue(statusRef(), (s)=>{
+        const st = s.val() || "waiting";
+        if (st === "playing"){
+          msg.textContent = "FIGHT!  (J:パンチ / K:ガード)";
+        } else if (st === "waiting"){
+          msg.textContent = "Waiting for opponent...";
+        } else if (st === "finished"){
+          msg.textContent = "Match finished. Press R to restart (creates fresh room).";
+        }
+      });
+
+      // enemy player
+      onValue(playerRef(enemySlot), (s)=>{
+        const v = s.val();
+        if (!v){
+          remote.online = false;
+          return;
+        }
+        remote.online = !!v.online;
+        remote.x = typeof v.x === "number" ? v.x : remote.x;
+        remote.y = typeof v.y === "number" ? v.y : remote.y;
+        remote.hp = typeof v.hp === "number" ? v.hp : remote.hp;
+        remote.face = typeof v.face === "number" ? v.face : remote.face;
+        remote.action = v.action || remote.action;
+
+        // HUD update
+        updateHud();
+      });
+
+      // my player mirrored from DB (for hp changes by opponent)
+      onValue(playerRef(mySlot), (s)=>{
+        const v = s.val();
+        if (!v) return;
+        if (typeof v.hp === "number") local.hp = v.hp;
+        if (v.action) local.action = v.action;
+        updateHud();
+      });
+    }
+
+    /******************************************************************
+     * 10) 入力
+     ******************************************************************/
+    window.addEventListener("keydown", (e)=>{
+      ensureAudio();
+      if (["ArrowLeft","ArrowRight","KeyA","KeyD","KeyJ","KeyK","KeyR"].includes(e.code)){
+        e.preventDefault();
+      }
+      keys.add(e.code);
+
+      if (e.code === "KeyJ") tryPunch();
+      if (e.code === "KeyR") restartFresh();
+    });
+    window.addEventListener("keyup", (e)=> keys.delete(e.code));
+
+    // touch buttons
+    document.querySelectorAll(".tbtn").forEach(btn=>{
+      const code = btn.dataset.key;
+      btn.addEventListener("pointerdown", (e)=>{
+        ensureAudio();
+        keys.add(code);
+        if (code === "KeyJ") tryPunch();
+      });
+      btn.addEventListener("pointerup", ()=> keys.delete(code));
+      btn.addEventListener("pointercancel", ()=> keys.delete(code));
+      btn.addEventListener("pointerleave", ()=> keys.delete(code));
+    });
+
+    /******************************************************************
+     * 11) ゲームロジック
+     ******************************************************************/
+    function isGuarding(){
+      return keys.has("KeyK");
+    }
+
+    function tryPunch(){
+      if (!roomId || !mySlot) return;
+      const now = performance.now();
+      if (local.hp <= 0) return;
+      if (now < local.punchUntil) return; // already punching
+      local.action = "punch";
+      local.punchUntil = now + PUNCH_TIME;
+      beep(520, 0.05, "square", 0.08); // punch se
+
+      // face enemy
+      local.face = (remote.x >= local.x) ? 1 : -1;
+
+      // hit check (attacker decides)
+      const inRange = Math.abs(remote.x - local.x) < PUNCH_RANGE;
+      const enemyAlive = remote.hp > 0;
+      if (inRange && enemyAlive){
+        // if enemy guarding, reduced damage
+        const guarded = (remote.action === "guard");
+        const dmg = guarded ? Math.floor(DAMAGE * 0.35) : DAMAGE;
+
+        // apply damage via transaction on enemy hp (single source of truth)
+        const enemyHpRef = ref(db, `rooms/${roomId}/players/${enemySlot}/hp`);
+        const enemyActionRef = ref(db, `rooms/${roomId}/players/${enemySlot}/action`);
+
+        runTransaction(enemyHpRef, (hp)=>{
+          if (typeof hp !== "number") hp = 100;
+          if (hp <= 0) return hp;
+          return Math.max(0, hp - dmg);
+        }).then(async (res)=>{
+          // after hp reduced, set enemy action to hit/ko
+          thud();
+          const newHp = res.snapshot.val();
+          if (newHp <= 0){
+            await update(ref(db, `rooms/${roomId}/players/${enemySlot}`), { action:"ko", updatedAt: serverTimestamp() });
+            await set(statusRef(), "finished");
+          } else {
+            await set(enemyActionRef, "hit");
+            // return enemy to idle quickly
+            setTimeout(()=> {
+              // only if still in hit
+              get(enemyActionRef).then(s=>{
+                if (s.val() === "hit") set(enemyActionRef, "idle");
+              }).catch(()=>{});
+            }, 160);
+          }
+        }).catch(()=>{});
+      }
+    }
+
+    function step(dt){
+      if (!playing) return;
+
+      // actions
+      if (local.hp <= 0){
+        local.action = "ko";
+      } else {
+        const now = performance.now();
+
+        // resolve punch end
+        if (local.action === "punch" && now >= local.punchUntil){
+          local.action = isGuarding() ? "guard" : "idle";
+        } else if (local.action !== "punch"){
+          local.action = isGuarding() ? "guard" : local.action;
+          if (!isGuarding() && local.action === "guard") local.action = "idle";
+        }
+
+        // movement
+        let dir = 0;
+        if (keys.has("ArrowLeft") || keys.has("KeyA")) dir -= 1;
+        if (keys.has("ArrowRight") || keys.has("KeyD")) dir += 1;
+
+        if (dir !== 0){
+          local.x += dir * SPEED;
+          local.x = clamp(local.x, 40, W - 40);
+          // face direction (movement)
+          local.face = dir > 0 ? 1 : -1;
+        } else {
+          // face enemy naturally when idle/guard
+          if (local.action !== "punch"){
+            local.face = (remote.x >= local.x) ? 1 : -1;
+          }
+        }
+      }
+
+      // send to firebase at ~12Hz
+      const now = performance.now();
+      if (now - lastSendAt > 80 && roomId && mySlot){
+        lastSendAt = now;
+        update(playerRef(mySlot), {
+          x: local.x,
+          y: local.y,
+          hp: local.hp,
+          face: local.face,
+          action: local.action,
+          updatedAt: serverTimestamp(),
+          online: true
+        }).catch(()=>{});
+      }
+
+      updateHud();
+    }
+
+    /******************************************************************
+     * 12) 描画
+     ******************************************************************/
+    function draw(){
+      // background
+      ctx.clearRect(0,0,W,H);
+
+      // floor
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "rgba(255,255,255,0.06)";
+      ctx.fillRect(0, GROUND_Y + 38, W, 3);
+
+      // center line
+      ctx.fillStyle = "rgba(255,255,255,0.05)";
+      ctx.fillRect(W/2 - 1, 0, 2, H);
+
+      // players
+      drawFighter(local, true);
+      drawFighter(remote, false);
+
+      // texts
+      ctx.fillStyle = "rgba(234,240,255,0.8)";
+      ctx.font = "14px system-ui";
+      if (!remote.online){
+        ctx.fillText("ENEMY: not connected", W-200, 26);
+      }
+    }
+
+    function drawFighter(p, isMe){
+      const x = p.x;
+      const y = p.y;
+
+      // body color
+      const alive = (p.hp > 0);
+      const base = isMe ? "rgba(65,185,255,0.9)" : "rgba(255,77,109,0.9)";
+      const dim = isMe ? "rgba(65,185,255,0.35)" : "rgba(255,77,109,0.35)";
+
+      // shadow
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.beginPath();
+      ctx.ellipse(x, y+34, 26, 8, 0, 0, Math.PI*2);
+      ctx.fill();
+
+      // body
+      ctx.fillStyle = alive ? base : dim;
+      roundRect(x - p.w/2, y - p.h, p.w, p.h, 10, true);
+
+      // head
+      ctx.fillStyle = alive ? "rgba(234,240,255,0.9)" : "rgba(234,240,255,0.35)";
+      ctx.beginPath();
+      ctx.arc(x, y - p.h - 16, 14, 0, Math.PI*2);
+      ctx.fill();
+
+      // face direction eye
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
+      ctx.beginPath();
+      ctx.arc(x + (p.face*5), y - p.h - 18, 2.5, 0, Math.PI*2);
+      ctx.fill();
+
+      // action effects
+      if (p.action === "guard"){
+        ctx.strokeStyle = "rgba(255,255,255,0.35)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y - p.h/2, 34, 0.3*Math.PI, 1.7*Math.PI);
+        ctx.stroke();
+      }
+      if (p.action === "punch"){
+        const armX = x + p.face * (p.w/2 + 18);
+        const armY = y - p.h*0.55;
+        ctx.strokeStyle = "rgba(255,255,255,0.7)";
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(x + p.face*(p.w/2 - 6), armY);
+        ctx.lineTo(armX, armY);
+        ctx.stroke();
+
+        // range indicator small
+        ctx.globalAlpha = 0.10;
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(x + p.face*PUNCH_RANGE, y - p.h*0.55, 10, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      if (p.action === "hit"){
+        ctx.globalAlpha = 0.18;
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(x, y - p.h - 16, 22, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      if (p.action === "ko"){
+        ctx.fillStyle = "rgba(234,240,255,0.85)";
+        ctx.font = "900 18px system-ui";
+        ctx.fillText("KO", x - 14, y - p.h - 48);
+      }
+    }
+
+    function roundRect(x,y,w,h,r,fill){
+      const rr = Math.min(r, w/2, h/2);
+      ctx.beginPath();
+      ctx.moveTo(x+rr, y);
+      ctx.arcTo(x+w, y, x+w, y+h, rr);
+      ctx.arcTo(x+w, y+h, x, y+h, rr);
+      ctx.arcTo(x, y+h, x, y, rr);
+      ctx.arcTo(x, y, x+w, y, rr);
+      if (fill) ctx.fill();
+      else ctx.stroke();
+    }
+
+    function updateHud(){
+      const myHp = clamp(local.hp, 0, 100);
+      const enHp = clamp(remote.hp, 0, 100);
+      hpMeFill.style.width = myHp + "%";
+      hpEnFill.style.width = enHp + "%";
+      hpMeText.textContent = String(myHp);
+      hpEnText.textContent = String(enHp);
+
+      if (myHp <= 0){
+        msg.textContent = "YOU LOSE...  (R:リスタート)";
+      } else if (enHp <= 0){
+        msg.textContent = "YOU WIN!!!  (R:リスタート)";
+      }
+    }
+
+    /******************************************************************
+     * 13) ループ
+     ******************************************************************/
+    function loop(t){
+      const dt = t - lastFrame;
+      lastFrame = t;
+
+      step(dt);
+      draw();
+
+      requestAnimationFrame(loop);
+    }
+
+    /******************************************************************
+     * 14) リスタート（新しい room を作ってやり直す）
+     ******************************************************************/
+    async function restartFresh(){
+      if (!uid) return;
+      // 今の部屋は finished にして、新しい room を作る
+      try{
+        if (roomId) await set(statusRef(), "finished");
+      }catch(_){}
+      const newId = randomRoomId();
+      roomInput.value = newId;
+      await createOrStartRoom(newId);
+    }
+
+    /******************************************************************
+     * 15) ボタン動作
+     ******************************************************************/
+    createBtn.addEventListener("click", async ()=>{
+      ensureAudio();
+      const rid = (roomInput.value || "").trim() || parseRoomFromHash() || randomRoomId();
+      roomInput.value = rid;
+      await createOrStartRoom(rid);
+    });
+
+    joinBtn.addEventListener("click", async ()=>{
+      ensureAudio();
+      const rid = (roomInput.value || "").trim() || parseRoomFromHash();
+      if (!rid){
+        msg.textContent = "roomId を入れて Join してください。";
+        return;
+      }
+      await joinRoom(rid);
+    });
+
+    copyBtn.addEventListener("click", async ()=>{
+      const rid = roomId || (roomInput.value || "").trim() || parseRoomFromHash();
+      if (!rid){
+        msg.textContent = "先に room を作るか roomId を入れてください。";
+        return;
+      }
+      const url = location.origin + location.pathname + "#room=" + encodeURIComponent(rid);
+      try{
+        await navigator.clipboard.writeText(url);
+        msg.textContent = "Invite URL copied!";
+      }catch(_){
+        prompt("Copy this URL:", url);
+      }
+    });
+
+    /******************************************************************
+     * 16) 起動：匿名ログイン → hash の room があれば自動Join
+     ******************************************************************/
+    setStatus("auth...");
+    signInAnonymously(auth).catch((e)=>{
+      console.error(e);
+      setStatus("auth error");
+      msg.textContent = "Firebase Auth error. (Console を確認)";
+    });
+
+    onAuthStateChanged(auth, async (u)=>{
+      if (!u) return;
+      uid = u.uid;
+      setStatus("ready");
+      const rid = parseRoomFromHash();
+      if (rid){
+        roomInput.value = rid;
+        await joinRoom(rid);
+      }
+      requestAnimationFrame(loop);
+    });
+
+    /******************************************************************
+     * 17) 参考：Realtime Database ルール（必要なら Console で設定）
+     *
+     * まずは開発用（危険：公開はしない）
+     * {
+     *   "rules": { ".read": true, ".write": true }
+     * }
+     *
+     * ちゃんとやるなら、room 以下のみ許可 + 認証必須などにする。
+     ******************************************************************/
+  </script>
+</body>
+</html>
