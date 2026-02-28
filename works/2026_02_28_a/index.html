@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Water the Flowers</title>
+  <style>
+    :root {
+      --panel-bg: rgba(255, 255, 255, 0.85);
+      --text: #222;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", Arial, sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: url("background.png") center/cover no-repeat fixed;
+    }
+
+    .game{
+      width: min(1100px, 96vw);
+      background: none;
+      border-radius: 0;
+      padding: 0;
+      box-shadow: none;
+      backdrop-filter: none;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .title {
+      font-weight: 800;
+      letter-spacing: 0.2px;
+    }
+
+    .stats {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .badge {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.06);
+    }
+
+    .btn {
+      appearance: none;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-weight: 700;
+      cursor: pointer;
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    .btn:hover {
+      background: rgba(0, 0, 0, 0.14);
+    }
+
+    .field {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+      align-items: end;
+      user-select: none;
+    }
+
+    .pot {
+      position: relative;
+      border-radius: 14px;
+      padding: 12px;
+      cursor: pointer;
+      transition: transform 0.06s ease;
+      overflow: hidden;
+    }
+
+    .pot:active {
+      transform: translateY(1px) scale(0.995);
+    }
+
+    .flower {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+
+    .flower img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+    }
+
+    /* ✅ ジョウロ演出 */
+    .watering {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(-6px) scale(0.98);
+      transition: opacity 0.08s ease, transform 0.08s ease;
+    }
+
+    .watering.show {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .watering img {
+      width: min(120px, 55%);
+      height: auto;
+      filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.25));
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      background: rgba(0, 0, 0, 0.55);
+      z-index: 50;
+      padding: 20px;
+    }
+
+    .overlay.show {
+      display: grid;
+    }
+
+    .modal {
+      width: min(520px, 92vw);
+      background: #fff;
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+      text-align: center;
+    }
+
+    .modal h2 {
+      margin: 0 0 10px;
+      font-size: 22px;
+    }
+
+    .modal p {
+      margin: 0 0 14px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="game">
+    <div class="topbar">
+      <div class="title">🌻 水やりゲーム（5つのひまわり）</div>
+      <div class="stats">
+        <div class="badge">スコア: <span id="score">0</span></div>
+        <div class="badge">経過: <span id="time">0.0</span>s</div>
+        <button class="btn" id="restartBtn">リスタート</button>
+      </div>
+    </div>
+
+    <div class="field" id="field"></div>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2>Game Over</h2>
+      <p id="gameoverReason">枯れてしまいました。</p>
+      <button class="btn" id="restartBtn2">もう一度</button>
+    </div>
+  </div>
+
+  <script>
+    // ===== 画像ファイル名 =====
+    // ✅ ここで 2 と 3 を正しく割り当て
+    const IMG = {
+      healthy: "flower1.png",   // 元気
+      wilting: "flower2.png",   // 枯れる途中（← 3）
+      dead: "flower3.png",   // 完全に枯れた（← 2）
+      over: "flower4.png"    // 水あげすぎ
+    };
+
+    // 演出素材
+    const WATERING_IMG = "water.png";
+    const WATER_SOUND = "water.mp3";
+
+    // ===== ゲーム設定 =====
+    const PLANTS = 5;
+    const TICK_MS = 100;
+    const DRY_TIME_MS = 8000; // 8秒で枯れる
+    const DRY_PER_TICK = 100 / (DRY_TIME_MS / TICK_MS);
+
+    const WATER_POWER = 22;
+
+    const OVER_ADD = 16;
+    const OVER_DECAY_PER_TICK = 2.3;
+
+    const OVER_STATE_THRESHOLD = 55;
+    const OVER_GAMEOVER = 100;
+
+    const WILTING_THRESHOLD = 60;
+
+    // ===== 状態 =====
+    let plants = [];
+    let timer = null;
+    let startAt = 0;
+    let score = 0;
+    let running = false;
+
+    const field = document.getElementById("field");
+    const scoreEl = document.getElementById("score");
+    const timeEl = document.getElementById("time");
+    const overlay = document.getElementById("overlay");
+    const reasonEl = document.getElementById("gameoverReason");
+
+    // ✅ クリック時に音が鳴らないことがあるので、事前にAudioを用意
+    const waterAudio = new Audio(WATER_SOUND);
+    waterAudio.preload = "auto";
+
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+    function createPlant(i) {
+      const el = document.createElement("div");
+      el.className = "pot";
+      el.dataset.index = i;
+
+      el.innerHTML = `
+        <div class="flower"><img alt="flower" /></div>
+        <div class="watering"><img alt="watering" src="${WATERING_IMG}" /></div>
+      `;
+
+      el.addEventListener("click", () => water(i));
+      field.appendChild(el);
+
+      return {
+        dry: 0,
+        over: 0,
+        dead: false,
+        el,
+        wateringTimer: null
+      };
+    }
+
+    function setImage(p) {
+      const img = p.el.querySelector(".flower img");
+      if (p.dead) { img.src = IMG.dead; return; }
+      if (p.over >= OVER_STATE_THRESHOLD) { img.src = IMG.over; return; }
+      if (p.dry >= WILTING_THRESHOLD) { img.src = IMG.wilting; return; }
+      img.src = IMG.healthy;
+    }
+
+    function renderAll() {
+      scoreEl.textContent = score;
+      const t = (Date.now() - startAt) / 1000;
+      timeEl.textContent = t.toFixed(1);
+      plants.forEach(setImage);
+    }
+
+    function showWatering(p) {
+      const w = p.el.querySelector(".watering");
+      w.classList.add("show");
+      clearTimeout(p.wateringTimer);
+      p.wateringTimer = setTimeout(() => w.classList.remove("show"), 280);
+    }
+
+    function playWaterSound() {
+      // 連打しても鳴るように currentTime を戻す
+      try {
+        waterAudio.currentTime = 0;
+        waterAudio.play();
+      } catch (e) {
+        // ブラウザ制限で弾かれることがあるが、クリック操作なら通常OK
+      }
+    }
+
+    function water(i) {
+      if (!running) return;
+      const p = plants[i];
+      if (p.dead) return;
+
+      // 演出
+      showWatering(p);
+      playWaterSound();
+
+      // 状態変化
+      p.dry = clamp(p.dry - WATER_POWER, 0, 100);
+      p.over = clamp(p.over + OVER_ADD, 0, 100);
+
+      score += 1;
+      setImage(p);
+
+      if (p.over >= OVER_GAMEOVER) {
+        gameOver(`水をあげすぎました（ひまわり ${i + 1}）`);
+      }
+    }
+
+    function step() {
+      for (let i = 0; i < plants.length; i++) {
+        const p = plants[i];
+        if (p.dead) continue;
+
+        p.dry = clamp(p.dry + DRY_PER_TICK, 0, 100);
+        p.over = clamp(p.over - OVER_DECAY_PER_TICK, 0, 100);
+
+        if (p.dry >= 100) {
+          p.dead = true;
+          setImage(p);
+          gameOver(`枯れてしまいました（ひまわり ${i + 1}）`);
+          return;
+        }
+        setImage(p);
+      }
+      renderAll();
+    }
+
+    function gameOver(msg) {
+      running = false;
+      clearInterval(timer);
+      timer = null;
+
+      reasonEl.textContent = msg;
+      overlay.classList.add("show");
+    }
+
+    function reset() {
+      clearInterval(timer);
+      timer = null;
+      running = true;
+
+      overlay.classList.remove("show");
+      field.innerHTML = "";
+      plants = [];
+      score = 0;
+      startAt = Date.now();
+
+      for (let i = 0; i < PLANTS; i++) {
+        plants.push(createPlant(i));
+      }
+      renderAll();
+
+      timer = setInterval(step, TICK_MS);
+    }
+
+    document.getElementById("restartBtn").addEventListener("click", reset);
+    document.getElementById("restartBtn2").addEventListener("click", reset);
+
+    reset();
+  </script>
+</body>
+
+</html>
