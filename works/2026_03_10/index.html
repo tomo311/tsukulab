@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bird Fly Game</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(to bottom, #87ceeb, #dff6ff);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .game-wrap {
+      text-align: center;
+    }
+
+    #gameCanvas {
+      background: linear-gradient(to bottom, #8fd3ff 0%, #d9f3ff 70%, #e8f7d4 70%, #bfe3a8 100%);
+      border: 3px solid #333;
+      border-radius: 12px;
+      display: block;
+      touch-action: manipulation;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+    }
+
+    .info {
+      margin-top: 12px;
+      color: #333;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: #222;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="game-wrap">
+    <div class="title">Bird Fly Game</div>
+    <canvas id="gameCanvas" width="420" height="640"></canvas>
+    <div class="info">
+      スペースキー / タップで上に飛ぶ<br>
+      壁にぶつかるとゲームオーバー
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    const damageSound = new Audio('damage.mp3');
+    damageSound.preload = 'auto';
+
+
+  const bgm = new Audio('background.mp3');
+  bgm.loop = true;
+  bgm.volume = 0.5;
+
+
+    const game = {
+      started: false,
+      over: false,
+      score: 0,
+      speed: 2.4,
+      gravity: 0.32,
+      flap: -6.2,
+      pipeGap: 160,
+      pipeWidth: 72,
+      pipeInterval: 400,
+      frame: 0
+    };
+
+    const bird = {
+      x: 100,
+      y: H / 2,
+      r: 16,
+      vy: 0,
+      rotation: 0
+    };
+
+    const pipes = [];
+
+    function resetGame() {
+      game.started = false;
+      game.over = false;
+      game.score = 0;
+      game.frame = 0;
+
+      bird.x = 100;
+      bird.y = H / 2;
+      bird.vy = 0;
+      bird.rotation = 0;
+
+      pipes.length = 0;
+      createPipe(W + 120);
+      createPipe(W + 120 + game.pipeInterval);
+    }
+
+    function createPipe(x) {
+      const margin = 70;
+      const topHeight = Math.random() * (H - game.pipeGap - margin * 2) + margin;
+      pipes.push({
+        x,
+        topHeight,
+        passed: false
+      });
+    }
+
+    function flapBird() {
+      if (game.over) {
+        resetGame();
+        return;
+      }
+
+
+      if (!game.started) {
+        bgm.play();
+      }
+
+
+      game.started = true;
+      bird.vy = game.flap;
+    }
+
+    function update() {
+      if (!game.started || game.over) return;
+
+      game.frame++;
+      bird.vy += game.gravity;
+      bird.y += bird.vy;
+      bird.rotation = Math.min(Math.max(bird.vy * 0.08, -0.5), 1.0);
+
+      for (let i = pipes.length - 1; i >= 0; i--) {
+        const pipe = pipes[i];
+        pipe.x -= game.speed;
+
+        if (!pipe.passed && pipe.x + game.pipeWidth < bird.x) {
+          pipe.passed = true;
+          game.score++;
+        }
+
+        if (pipe.x + game.pipeWidth < 0) {
+          pipes.splice(i, 1);
+        }
+      }
+
+      const lastPipe = pipes[pipes.length - 1];
+      if (lastPipe && lastPipe.x < W - game.pipeInterval) {
+        createPipe(W + 20);
+      }
+
+      checkCollision();
+    }
+
+    function checkCollision() {
+      if (bird.y - bird.r <= 0 || bird.y + bird.r >= H) {
+        triggerGameOver();
+        return;
+      }
+
+      for (const pipe of pipes) {
+        const inPipeX = bird.x + bird.r > pipe.x && bird.x - bird.r < pipe.x + game.pipeWidth;
+        const hitsTop = bird.y - bird.r < pipe.topHeight;
+        const hitsBottom = bird.y + bird.r > pipe.topHeight + game.pipeGap;
+
+        if (inPipeX && (hitsTop || hitsBottom)) {
+          triggerGameOver();
+          return;
+        }
+      }
+    }
+
+    function triggerGameOver() {
+      if (game.over) return;
+      game.over = true;
+
+      try {
+        damageSound.currentTime = 0;
+        damageSound.play();
+      } catch (e) {
+        console.log('damage.mp3 をまだ置いていない場合は音は鳴りません');
+      }
+    }
+
+    function drawBackground() {
+      ctx.fillStyle = '#8fd3ff';
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      drawCloud(80, 100, 26);
+      drawCloud(250, 140, 20);
+      drawCloud(340, 90, 22);
+
+      ctx.fillStyle = '#bfe3a8';
+      ctx.fillRect(0, H - 70, W, 70);
+    }
+
+    function drawCloud(x, y, size) {
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.arc(x + size * 0.9, y - 8, size * 0.85, 0, Math.PI * 2);
+      ctx.arc(x + size * 1.8, y, size * 0.75, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawBird() {
+      ctx.save();
+      ctx.translate(bird.x, bird.y);
+      ctx.rotate(bird.rotation);
+
+      ctx.fillStyle = '#ffd34d';
+      ctx.beginPath();
+      ctx.arc(0, 0, bird.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ff9f1c';
+      ctx.beginPath();
+      ctx.moveTo(10, 0);
+      ctx.lineTo(24, -5);
+      ctx.lineTo(24, 5);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(5, -5, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#222';
+      ctx.beginPath();
+      ctx.arc(7, -5, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#e8b400';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-4, 2);
+      ctx.quadraticCurveTo(-14, -10, -2, -12);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawPipes() {
+      for (const pipe of pipes) {
+        const bottomY = pipe.topHeight + game.pipeGap;
+
+        ctx.fillStyle = '#2e8b57';
+        ctx.fillRect(pipe.x, 0, game.pipeWidth, pipe.topHeight);
+        ctx.fillRect(pipe.x, bottomY, game.pipeWidth, H - bottomY);
+
+        ctx.fillStyle = '#3cb371';
+        ctx.fillRect(pipe.x - 4, pipe.topHeight - 18, game.pipeWidth + 8, 18);
+        ctx.fillRect(pipe.x - 4, bottomY, game.pipeWidth + 8, 18);
+      }
+    }
+
+    function drawUI() {
+      ctx.fillStyle = '#222';
+      ctx.font = 'bold 28px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText(`Score: ${game.score}`, 16, 40);
+
+      if (!game.started && !game.over) {
+        drawCenterText('スペースキー / タップでスタート', H / 2 - 10, 24);
+      }
+
+      if (game.over) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+        ctx.fillRect(40, H / 2 - 90, W - 80, 160);
+
+        drawCenterText('GAME OVER', H / 2 - 30, 34, '#ffffff');
+        drawCenterText(`Score: ${game.score}`, H / 2 + 10, 24, '#ffffff');
+        drawCenterText('タップ / スペースでリスタート', H / 2 + 50, 18, '#ffffff');
+      }
+    }
+
+    function drawCenterText(text, y, size, color = '#222') {
+      ctx.fillStyle = color;
+      ctx.font = `bold ${size}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.fillText(text, W / 2, y);
+    }
+
+    function draw() {
+      drawBackground();
+      drawPipes();
+      drawBird();
+      drawUI();
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        flapBird();
+      }
+    });
+
+    canvas.addEventListener('pointerdown', () => {
+      flapBird();
+    });
+
+    resetGame();
+    loop();
+  </script>
+</body>
+
+</html>
