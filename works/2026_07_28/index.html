@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>カラフル・ブロック崩し</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #ffffff;
+      font-family: Arial, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+      color: #263238;
+    }
+
+    .game-wrapper {
+      width: min(94vw, 860px);
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 28px;
+    }
+
+    .status-bar {
+      display: flex;
+      justify-content: center;
+      gap: 28px;
+      margin-bottom: 12px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    button {
+      padding: 9px 18px;
+      border: 2px solid #263238;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #263238;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: transform 0.15s, background 0.15s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      background: #f3f6f8;
+    }
+
+    button.active {
+      background: #263238;
+      color: #ffffff;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 3px solid #263238;
+      border-radius: 10px;
+      background: #ffffff;
+      touch-action: none;
+    }
+
+    .help {
+      margin-top: 10px;
+      color: #607d8b;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <main class="game-wrapper">
+    <h1>カラフル・ブロック崩し</h1>
+
+    <div class="status-bar">
+      <span>スコア：<span id="score">0</span></span>
+      <span>ライフ：<span id="lives">5</span></span>
+    </div>
+
+    <div class="controls">
+      <button id="slowButton" class="active">ゆっくり</button>
+      <button id="fastButton">はやい</button>
+      <button id="startButton">スタート</button>
+      <button id="resetButton">リセット</button>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="560"></canvas>
+
+    <p class="help">
+      ← → キー、マウス、タッチで棒を動かします。スペースキーでも開始できます。
+    </p>
+  </main>
+
+  <script>
+    // =========================
+    // 調整しやすいゲーム設定
+    // =========================
+    const SETTINGS = {
+      initialLives: 5,
+      slowSpeed: 2.8,
+      fastSpeed: 6.5,
+      initialPaddleWidth: 130,
+      minimumPaddleWidth: 60,
+      paddleShrinkAmount: 14,
+      shrinkEveryScore: 100,
+      pointsPerBlock: 10,
+
+      blockRows: 6,
+      blockColumns: 10,
+      blockGap: 7,
+      blockTop: 55,
+      blockSideMargin: 30,
+      blockHeight: 24
+    };
+
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const scoreElement = document.getElementById("score");
+    const livesElement = document.getElementById("lives");
+    const slowButton = document.getElementById("slowButton");
+    const fastButton = document.getElementById("fastButton");
+    const startButton = document.getElementById("startButton");
+    const resetButton = document.getElementById("resetButton");
+
+    // index.htmlと同じフォルダにhit.mp3を置いてください
+    const hitSound = new Audio("hit.mp3");
+    hitSound.volume = 0.5;
+
+    const blockColors = [
+      "#ff6b6b",
+      "#ff9f43",
+      "#feca57",
+      "#1dd1a1",
+      "#54a0ff",
+      "#5f27cd"
+    ];
+
+    let score;
+    let lives;
+    let gameRunning;
+    let gameOver;
+    let gameCleared;
+    let selectedSpeed;
+    let lastShrinkLevel;
+    let animationId;
+
+    const paddle = {
+      x: 0,
+      y: canvas.height - 38,
+      width: SETTINGS.initialPaddleWidth,
+      height: 15,
+      speed: 8,
+      movingLeft: false,
+      movingRight: false
+    };
+
+    const ball = {
+      x: canvas.width / 2,
+      y: canvas.height - 65,
+      radius: 8,
+      dx: 0,
+      dy: 0
+    };
+
+    let blocks = [];
+
+    function createBlocks() {
+      blocks = [];
+
+      const totalGapWidth =
+        SETTINGS.blockGap * (SETTINGS.blockColumns - 1);
+
+      const usableWidth =
+        canvas.width - SETTINGS.blockSideMargin * 2 - totalGapWidth;
+
+      const blockWidth = usableWidth / SETTINGS.blockColumns;
+
+      for (let row = 0; row < SETTINGS.blockRows; row++) {
+        for (let column = 0; column < SETTINGS.blockColumns; column++) {
+          blocks.push({
+            x:
+              SETTINGS.blockSideMargin +
+              column * (blockWidth + SETTINGS.blockGap),
+            y:
+              SETTINGS.blockTop +
+              row * (SETTINGS.blockHeight + SETTINGS.blockGap),
+            width: blockWidth,
+            height: SETTINGS.blockHeight,
+            color: blockColors[row % blockColors.length],
+            visible: true
+          });
+        }
+      }
+    }
+
+    function resetBallAndPaddle() {
+      paddle.x = (canvas.width - paddle.width) / 2;
+
+      ball.x = canvas.width / 2;
+      ball.y = paddle.y - ball.radius - 3;
+
+      const direction = Math.random() < 0.5 ? -1 : 1;
+      ball.dx = selectedSpeed * 0.72 * direction;
+      ball.dy = -selectedSpeed;
+    }
+
+    function resetGame() {
+      cancelAnimationFrame(animationId);
+
+      score = 0;
+      lives = SETTINGS.initialLives;
+      gameRunning = false;
+      gameOver = false;
+      gameCleared = false;
+      selectedSpeed = SETTINGS.slowSpeed;
+      lastShrinkLevel = 0;
+
+      paddle.width = SETTINGS.initialPaddleWidth;
+
+      slowButton.classList.add("active");
+      fastButton.classList.remove("active");
+      startButton.textContent = "スタート";
+
+      createBlocks();
+      resetBallAndPaddle();
+      updateStatus();
+      draw();
+    }
+
+    function updateStatus() {
+      scoreElement.textContent = score;
+      livesElement.textContent = lives;
+    }
+
+    function setSpeed(speed, buttonToActivate) {
+      selectedSpeed = speed;
+
+      slowButton.classList.remove("active");
+      fastButton.classList.remove("active");
+      buttonToActivate.classList.add("active");
+
+      const horizontalDirection = ball.dx < 0 ? -1 : 1;
+      const verticalDirection = ball.dy < 0 ? -1 : 1;
+
+      ball.dx = selectedSpeed * 0.72 * horizontalDirection;
+      ball.dy = selectedSpeed * verticalDirection;
+    }
+
+    function startGame() {
+      if (gameOver || gameCleared) {
+        resetGame();
+      }
+
+      if (!gameRunning) {
+        gameRunning = true;
+        startButton.textContent = "一時停止";
+        gameLoop();
+      } else {
+        gameRunning = false;
+        startButton.textContent = "再開";
+        cancelAnimationFrame(animationId);
+        draw();
+      }
+    }
+
+    function updatePaddle() {
+      if (paddle.movingLeft) {
+        paddle.x -= paddle.speed;
+      }
+
+      if (paddle.movingRight) {
+        paddle.x += paddle.speed;
+      }
+
+      paddle.x = Math.max(
+        0,
+        Math.min(canvas.width - paddle.width, paddle.x)
+      );
+    }
+
+    function moveBall() {
+      ball.x += ball.dx;
+      ball.y += ball.dy;
+
+      if (ball.x - ball.radius <= 0 && ball.dx < 0) {
+        ball.x = ball.radius;
+        ball.dx *= -1;
+      }
+
+      if (ball.x + ball.radius >= canvas.width && ball.dx > 0) {
+        ball.x = canvas.width - ball.radius;
+        ball.dx *= -1;
+      }
+
+      if (ball.y - ball.radius <= 0 && ball.dy < 0) {
+        ball.y = ball.radius;
+        ball.dy *= -1;
+      }
+
+      checkPaddleCollision();
+      checkBlockCollisions();
+
+      if (ball.y - ball.radius > canvas.height) {
+        loseLife();
+      }
+    }
+
+    function checkPaddleCollision() {
+      const hitsPaddle =
+        ball.dy > 0 &&
+        ball.x + ball.radius >= paddle.x &&
+        ball.x - ball.radius <= paddle.x + paddle.width &&
+        ball.y + ball.radius >= paddle.y &&
+        ball.y - ball.radius <= paddle.y + paddle.height;
+
+      if (!hitsPaddle) return;
+
+      ball.y = paddle.y - ball.radius;
+
+      const paddleCenter = paddle.x + paddle.width / 2;
+      const hitPosition =
+        (ball.x - paddleCenter) / (paddle.width / 2);
+
+      ball.dx = selectedSpeed * hitPosition;
+      ball.dy = -Math.abs(selectedSpeed);
+
+      if (Math.abs(ball.dx) < 1.2) {
+        ball.dx = ball.dx < 0 ? -1.2 : 1.2;
+      }
+    }
+
+    function playHitSound() {
+      hitSound.currentTime = 0;
+
+      hitSound.play().catch(error => {
+        console.log("効果音を再生できませんでした", error);
+      });
+    }
+
+    function checkBlockCollisions() {
+      for (const block of blocks) {
+        if (!block.visible) continue;
+
+        const closestX = Math.max(
+          block.x,
+          Math.min(ball.x, block.x + block.width)
+        );
+
+        const closestY = Math.max(
+          block.y,
+          Math.min(ball.y, block.y + block.height)
+        );
+
+        const distanceX = ball.x - closestX;
+        const distanceY = ball.y - closestY;
+
+        const collided =
+          distanceX * distanceX + distanceY * distanceY <=
+          ball.radius * ball.radius;
+
+        if (!collided) continue;
+
+        // 当たったブロックだけ消す
+        block.visible = false;
+
+        // ブロックに当たったときにhit.mp3を鳴らす
+        playHitSound();
+
+        score += SETTINGS.pointsPerBlock;
+        updateStatus();
+        shrinkPaddleIfNeeded();
+
+        const overlapLeft =
+          ball.x + ball.radius - block.x;
+        const overlapRight =
+          block.x + block.width - (ball.x - ball.radius);
+        const overlapTop =
+          ball.y + ball.radius - block.y;
+        const overlapBottom =
+          block.y + block.height - (ball.y - ball.radius);
+
+        const smallestOverlap = Math.min(
+          overlapLeft,
+          overlapRight,
+          overlapTop,
+          overlapBottom
+        );
+
+        if (
+          smallestOverlap === overlapLeft ||
+          smallestOverlap === overlapRight
+        ) {
+          ball.dx *= -1;
+        } else {
+          ball.dy *= -1;
+        }
+
+        checkClear();
+        break;
+      }
+    }
+
+    function shrinkPaddleIfNeeded() {
+      const shrinkLevel = Math.floor(
+        score / SETTINGS.shrinkEveryScore
+      );
+
+      if (shrinkLevel <= lastShrinkLevel) return;
+
+      const oldCenter = paddle.x + paddle.width / 2;
+
+      paddle.width = Math.max(
+        SETTINGS.minimumPaddleWidth,
+        SETTINGS.initialPaddleWidth -
+        shrinkLevel * SETTINGS.paddleShrinkAmount
+      );
+
+      paddle.x = Math.max(
+        0,
+        Math.min(
+          canvas.width - paddle.width,
+          oldCenter - paddle.width / 2
+        )
+      );
+
+      lastShrinkLevel = shrinkLevel;
+    }
+
+    function loseLife() {
+      lives--;
+      updateStatus();
+      gameRunning = false;
+      cancelAnimationFrame(animationId);
+
+      if (lives <= 0) {
+        gameOver = true;
+        startButton.textContent = "もう一度";
+        draw();
+        return;
+      }
+
+      resetBallAndPaddle();
+      startButton.textContent = "再スタート";
+      draw();
+    }
+
+    function checkClear() {
+      const remainingBlocks = blocks.some(
+        block => block.visible
+      );
+
+      if (!remainingBlocks) {
+        gameRunning = false;
+        gameCleared = true;
+        cancelAnimationFrame(animationId);
+        startButton.textContent = "もう一度";
+      }
+    }
+
+    function drawRoundedRect(x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.roundRect(x, y, width, height, radius);
+      ctx.fill();
+    }
+
+    function drawBlocks() {
+      for (const block of blocks) {
+        if (!block.visible) continue;
+
+        ctx.fillStyle = block.color;
+        drawRoundedRect(
+          block.x,
+          block.y,
+          block.width,
+          block.height,
+          5
+        );
+      }
+    }
+
+    function drawPaddle() {
+      ctx.fillStyle = "#263238";
+      drawRoundedRect(
+        paddle.x,
+        paddle.y,
+        paddle.width,
+        paddle.height,
+        7
+      );
+    }
+
+    function drawBall() {
+      ctx.beginPath();
+      ctx.arc(
+        ball.x,
+        ball.y,
+        ball.radius,
+        0,
+        Math.PI * 2
+      );
+      ctx.fillStyle = "#37474f";
+      ctx.fill();
+      ctx.closePath();
+    }
+
+    function drawMessage(title, subtitle) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.88)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#263238";
+      ctx.textAlign = "center";
+      ctx.font = "bold 42px Arial";
+      ctx.fillText(title, canvas.width / 2, canvas.height / 2 - 10);
+
+      ctx.font = "20px Arial";
+      ctx.fillText(
+        subtitle,
+        canvas.width / 2,
+        canvas.height / 2 + 32
+      );
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      drawBlocks();
+      drawPaddle();
+      drawBall();
+
+      if (gameOver) {
+        drawMessage(
+          "ゲームオーバー",
+          `スコア：${score}`
+        );
+      } else if (gameCleared) {
+        drawMessage(
+          "ゲームクリア！",
+          `スコア：${score}`
+        );
+      } else if (!gameRunning) {
+        ctx.fillStyle = "rgba(38, 50, 56, 0.7)";
+        ctx.textAlign = "center";
+        ctx.font = "bold 20px Arial";
+        ctx.fillText(
+          "スタートボタンを押してください",
+          canvas.width / 2,
+          canvas.height - 75
+        );
+      }
+    }
+
+    function gameLoop() {
+      if (!gameRunning) return;
+
+      updatePaddle();
+      moveBall();
+      draw();
+
+      animationId = requestAnimationFrame(gameLoop);
+    }
+
+    function movePaddleTo(clientX) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const mouseX = (clientX - rect.left) * scaleX;
+
+      paddle.x = mouseX - paddle.width / 2;
+      paddle.x = Math.max(
+        0,
+        Math.min(canvas.width - paddle.width, paddle.x)
+      );
+
+      if (!gameRunning) {
+        ball.x = paddle.x + paddle.width / 2;
+      }
+
+      draw();
+    }
+
+    document.addEventListener("keydown", event => {
+      if (event.key === "ArrowLeft") {
+        paddle.movingLeft = true;
+      }
+
+      if (event.key === "ArrowRight") {
+        paddle.movingRight = true;
+      }
+
+      if (event.code === "Space") {
+        event.preventDefault();
+        startGame();
+      }
+    });
+
+    document.addEventListener("keyup", event => {
+      if (event.key === "ArrowLeft") {
+        paddle.movingLeft = false;
+      }
+
+      if (event.key === "ArrowRight") {
+        paddle.movingRight = false;
+      }
+    });
+
+    canvas.addEventListener("mousemove", event => {
+      movePaddleTo(event.clientX);
+    });
+
+    canvas.addEventListener("touchmove", event => {
+      event.preventDefault();
+      movePaddleTo(event.touches[0].clientX);
+    }, { passive: false });
+
+    slowButton.addEventListener("click", () => {
+      setSpeed(SETTINGS.slowSpeed, slowButton);
+    });
+
+    fastButton.addEventListener("click", () => {
+      setSpeed(SETTINGS.fastSpeed, fastButton);
+    });
+
+    startButton.addEventListener("click", startGame);
+    resetButton.addEventListener("click", resetGame);
+
+    resetGame();
+  </script>
+</body>
+
+</html>
